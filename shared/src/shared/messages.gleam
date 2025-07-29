@@ -1,0 +1,224 @@
+import gleam/dynamic/decode
+import gleam/json
+import shared/history
+import shared/party
+
+pub type ClientMessage {
+  CreateParty(name: String)
+  JoinParty(code: String, name: String)
+  KickUser(id: Int)
+  SendDrawing(
+    history: List(history.HistoryItem),
+    color: String,
+    direction: history.Direction,
+  )
+  SendChatMessage(message: String)
+  StartDrawing
+  Undo(direction: history.Direction)
+  Redo(direction: history.Direction)
+}
+
+pub fn encode_client_message(msg: ClientMessage) -> String {
+  let #(msg_type_number, attached_data) = case msg {
+    CreateParty(name) -> #(0, [#("name", json.string(name))])
+    JoinParty(code, name) -> #(1, [
+      #("code", json.string(code)),
+      #("name", json.string(name)),
+    ])
+    KickUser(id) -> #(2, [#("id", json.int(id))])
+    SendChatMessage(message) -> #(3, [#("message", json.string(message))])
+    StartDrawing -> #(4, [])
+    SendDrawing(history, color, direction) -> {
+      let attached_data = [
+        #("history", json.array(history, history.history_item_to_json)),
+        #("color", json.string(color)),
+        #("direction", history.direction_to_json(direction)),
+      ]
+      #(5, attached_data)
+    }
+    Undo(direction) -> {
+      let attached_data = [#("direction", history.direction_to_json(direction))]
+      #(6, attached_data)
+    }
+    Redo(direction) -> {
+      let attached_data = [#("direction", history.direction_to_json(direction))]
+      #(7, attached_data)
+    }
+  }
+  json.object([#("t", json.int(msg_type_number)), ..attached_data])
+  |> json.to_string()
+}
+
+pub fn decode_client_message(
+  data: String,
+) -> Result(ClientMessage, json.DecodeError) {
+  let client_decoder = {
+    use type_ <- decode.field("t", decode.int)
+    case type_ {
+      0 -> {
+        use name <- decode.field("name", decode.string)
+        decode.success(CreateParty(name:))
+      }
+      1 -> {
+        use code <- decode.field("code", decode.string)
+        use name <- decode.field("name", decode.string)
+        decode.success(JoinParty(code:, name:))
+      }
+      2 -> {
+        use id <- decode.field("id", decode.int)
+        decode.success(KickUser(id:))
+      }
+      3 -> {
+        use message <- decode.field("message", decode.string)
+        decode.success(SendChatMessage(message:))
+      }
+      4 -> decode.success(StartDrawing)
+      5 -> {
+        use history <- decode.field(
+          "history",
+          decode.list(history.history_item_decoder()),
+        )
+        use color <- decode.field("color", decode.string)
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(SendDrawing(history:, color:, direction:))
+      }
+      6 -> {
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(Undo(direction:))
+      }
+      7 -> {
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(Redo(direction:))
+      }
+      _ -> decode.failure(CreateParty(""), "no type found")
+    }
+  }
+  json.parse(from: data, using: client_decoder)
+}
+
+pub type ServerMessage {
+  PartyCreated(code: String)
+  UserJoined(name: String, id: Int)
+  PartyInfo(party: party.Party, id: Int)
+  UserLeft(id: Int)
+  Disconnected(reason: String)
+  ChatMessage(id: Int, message: String)
+  DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool)
+  DrawingSent(
+    history: List(history.HistoryItem),
+    color: String,
+    direction: history.Direction,
+  )
+  UndoSent(direction: history.Direction)
+  RedoSent(direction: history.Direction)
+}
+
+pub fn encode_server_message(msg: ServerMessage) -> String {
+  let #(msg_type_number, attached_data) = case msg {
+    PartyCreated(code) -> #(0, [#("code", json.string(code))])
+    UserJoined(name, id) -> #(1, [
+      #("name", json.string(name)),
+      #("id", json.int(id)),
+    ])
+    PartyInfo(party, id) -> #(2, [
+      #("party", party.to_json(party)),
+      #("id", json.int(id)),
+    ])
+    UserLeft(id) -> #(3, [#("id", json.int(id))])
+    Disconnected(reason) -> #(4, [#("reason", json.string(reason))])
+    ChatMessage(id, message) -> #(5, [
+      #("id", json.int(id)),
+      #("message", json.string(message)),
+    ])
+    DrawingInit(top, left, right, bottom) -> {
+      let attached_data = [
+        #("top", json.bool(top)),
+        #("left", json.bool(left)),
+        #("right", json.bool(right)),
+        #("bottom", json.bool(bottom)),
+      ]
+      #(6, attached_data)
+    }
+    DrawingSent(history, color, direction) -> {
+      let attached_data = [
+        #("history", json.array(history, history.history_item_to_json)),
+        #("color", json.string(color)),
+        #("direction", history.direction_to_json(direction)),
+      ]
+      #(7, attached_data)
+    }
+    UndoSent(direction) -> {
+      let attached_data = [#("direction", history.direction_to_json(direction))]
+      #(8, attached_data)
+    }
+    RedoSent(direction) -> {
+      let attached_data = [#("direction", history.direction_to_json(direction))]
+      #(9, attached_data)
+    }
+  }
+  json.object([#("t", json.int(msg_type_number)), ..attached_data])
+  |> json.to_string()
+}
+
+pub fn decode_server_message(
+  data: String,
+) -> Result(ServerMessage, json.DecodeError) {
+  let server_decoder = {
+    use type_ <- decode.field("t", decode.int)
+    case type_ {
+      0 -> {
+        use code <- decode.field("code", decode.string)
+        decode.success(PartyCreated(code:))
+      }
+      1 -> {
+        use name <- decode.field("name", decode.string)
+        use id <- decode.field("id", decode.int)
+        decode.success(UserJoined(name:, id:))
+      }
+      2 -> {
+        use party_json <- decode.field("party", party.decoder())
+        use id <- decode.field("id", decode.int)
+        decode.success(PartyInfo(party: party_json, id:))
+      }
+      3 -> {
+        use id <- decode.field("id", decode.int)
+        decode.success(UserLeft(id:))
+      }
+      4 -> {
+        use reason <- decode.field("reason", decode.string)
+        decode.success(Disconnected(reason:))
+      }
+      5 -> {
+        use id <- decode.field("id", decode.int)
+        use message <- decode.field("message", decode.string)
+        decode.success(ChatMessage(id:, message:))
+      }
+      6 -> {
+        use top <- decode.field("top", decode.bool)
+        use left <- decode.field("left", decode.bool)
+        use right <- decode.field("right", decode.bool)
+        use bottom <- decode.field("bottom", decode.bool)
+        decode.success(DrawingInit(top:, left:, right:, bottom:))
+      }
+      7 -> {
+        use history <- decode.field(
+          "history",
+          decode.list(history.history_item_decoder()),
+        )
+        use color <- decode.field("color", decode.string)
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(DrawingSent(history:, color:, direction:))
+      }
+      8 -> {
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(UndoSent(direction:))
+      }
+      9 -> {
+        use direction <- decode.field("direction", history.direction_decoder())
+        decode.success(RedoSent(direction:))
+      }
+      _ -> decode.failure(PartyCreated(code: ""), "no type found")
+    }
+  }
+  json.parse(from: data, using: server_decoder)
+}

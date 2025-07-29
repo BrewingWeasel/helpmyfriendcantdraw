@@ -1,0 +1,322 @@
+// IMPORTS ---------------------------------------------------------------------
+
+import components/chat
+import gleam/dict
+import gleam/option.{type Option, None, Some}
+import gleam/string
+import lustre
+import lustre/effect
+import lustre/element.{type Element}
+import pages/disconnected
+import pages/drawing
+import pages/home
+import pages/party
+import shared/messages
+import shared/party.{Chat, SharedParty} as shared_party
+
+import lustre_websocket as ws
+
+// MAIN ------------------------------------------------------------------------
+
+pub fn main() {
+  let app = lustre.application(init, update, view)
+  let assert Ok(_) = lustre.start(app, "#app", Nil)
+
+  Nil
+}
+
+// MODEL -----------------------------------------------------------------------
+
+type Model {
+  Model(ws: Option(ws.WebSocket), page: Page)
+}
+
+type Page {
+  DrawingPage(drawing.Model)
+  HomePage(home.Model)
+  PartyPage(party.Model)
+  DisconnectedPage(reason: String)
+}
+
+fn init(_: a) -> #(Model, effect.Effect(Msg)) {
+  #(
+    Model(ws: None, page: HomePage(home.init().0)),
+    ws.init("http://127.0.0.1:3000/ws", WsWrapper),
+  )
+}
+
+// UPDATE ----------------------------------------------------------------------
+
+type Msg {
+  DrawingPageUpdate(drawing.Msg)
+  HomePageUpdate(home.Msg)
+  PartyPageUpdate(party.Msg)
+  WsWrapper(ws.WebSocketEvent)
+}
+
+fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
+  case msg {
+    DrawingPageUpdate(drawing_msg) -> {
+      let assert DrawingPage(drawing_model) = model.page
+      let #(new_drawing_model, effects) =
+        drawing.update(drawing_model, drawing_msg)
+      #(
+        Model(..model, page: DrawingPage(new_drawing_model)),
+        effects |> effect.map(DrawingPageUpdate),
+      )
+    }
+
+    WsWrapper(ws.OnTextMessage(message)) -> {
+      case messages.decode_server_message(message) {
+        Ok(msg) -> server_update(model, msg)
+        Error(_) -> #(model, effect.none())
+      }
+    }
+    WsWrapper(ws.OnBinaryMessage(_)) -> panic as "text messages only"
+    WsWrapper(ws.InvalidUrl) -> panic as "invalid websocket url"
+    WsWrapper(ws.OnOpen(ws)) -> {
+      echo "opened"
+      #(Model(..model, ws: Some(ws)), ws.send(ws, "connected"))
+    }
+
+    WsWrapper(ws.OnClose(reason)) -> {
+      case model.page {
+        DisconnectedPage(_) -> #(model, effect.none())
+        _ -> #(
+          Model(..model, page: DisconnectedPage(string.inspect(reason))),
+          effect.none(),
+        )
+      }
+    }
+
+    PartyPageUpdate(party.Start) -> {
+      let assert PartyPage(party.Model(
+        ws: Some(ws),
+        party: party.KnownParty(party),
+        ..,
+      )) = model.page
+
+      let #(drawing_model, effect) =
+        drawing.init(drawing.DrawingInit(ws:, party:))
+
+      #(
+        Model(..model, page: DrawingPage(drawing_model)),
+        effect.batch([
+          ws.send(
+            ws,
+            messages.StartDrawing
+              |> messages.encode_client_message(),
+          ),
+          effect |> effect.map(DrawingPageUpdate),
+        ]),
+      )
+    }
+
+    PartyPageUpdate(party_msg) -> {
+      let assert PartyPage(party_model) = model.page
+      let #(new_party_model, effects) = party.update(party_model, party_msg)
+      #(
+        Model(..model, page: PartyPage(new_party_model)),
+        effects |> effect.map(PartyPageUpdate),
+      )
+    }
+
+    HomePageUpdate(home.JoinRoom) -> {
+      let assert HomePage(home_model) = model.page
+
+      let assert Some(ws) = model.ws
+
+      let #(page, message) =
+        party.init(code: home_model.code, name: home_model.name, ws:)
+      #(
+        Model(..model, page: PartyPage(page)),
+        message |> effect.map(PartyPageUpdate),
+      )
+    }
+    HomePageUpdate(home_msg) -> {
+      let assert HomePage(home_model) = model.page
+      let #(new_home_model, effects) = home.update(home_model, home_msg)
+      #(
+        Model(..model, page: HomePage(new_home_model)),
+        effects |> effect.map(HomePageUpdate),
+      )
+    }
+  }
+}
+
+fn server_update(main_model: Model, message) {
+  let find_shared_party = fn(update) {
+    case main_model.page {
+      PartyPage(party.Model(party: party.KnownParty(shared), ..) as model) -> {
+        let #(new, effect) = update(shared)
+        #(
+          Model(
+            ..main_model,
+            page: PartyPage(party.Model(..model, party: party.KnownParty(new))),
+          ),
+          effect,
+        )
+      }
+      // HomePage(home_model) -> home_model.party
+      DrawingPage(drawing_model) -> {
+        let #(new, effect) = update(drawing_model.party)
+        #(
+          Model(
+            ..main_model,
+            page: DrawingPage(drawing.Model(..drawing_model, party: new)),
+          ),
+          effect,
+        )
+      }
+      _ -> #(main_model, effect.none())
+    }
+  }
+
+  case message {
+    messages.PartyCreated(code) -> {
+      let assert PartyPage(model) = main_model.page
+
+      let party =
+        party.KnownParty(SharedParty(
+          shared_party.new(model.name),
+          code,
+          Chat([], ""),
+          id: 0,
+        ))
+      #(
+        Model(..main_model, page: PartyPage(party.Model(..model, party:))),
+        effect.none(),
+      )
+    }
+    messages.UserJoined(name, id) -> {
+      use party <- find_shared_party()
+
+      let party =
+        SharedParty(
+          ..party,
+          info: shared_party.Party(
+            players: party.info.players
+            |> dict.insert(id, shared_party.Player(name: name)),
+          ),
+        )
+      #(party, effect.none())
+    }
+    messages.PartyInfo(party_info, id) -> {
+      let assert PartyPage(
+        party.Model(
+          party: party.PartyCode(code, _),
+          ..,
+        ) as model,
+      ) = main_model.page
+      let party =
+        party.KnownParty(SharedParty(party_info, code, Chat([], ""), id))
+      #(
+        Model(..main_model, page: PartyPage(party.Model(..model, party:))),
+        effect.none(),
+      )
+    }
+    messages.UserLeft(id) -> {
+      use party <- find_shared_party()
+
+      let players = party.info.players |> dict.delete(id)
+      #(SharedParty(..party, info: shared_party.Party(players:)), effect.none())
+    }
+    messages.Disconnected(reason) -> {
+      #(Model(..main_model, page: DisconnectedPage(reason)), effect.none())
+    }
+    messages.ChatMessage(id, message) -> {
+      use party <- find_shared_party()
+
+      let chat = chat.handle_chat_message(party.info, party.chat, id, message)
+      #(SharedParty(..party, chat:), effect.none())
+    }
+    messages.DrawingInit(top:, left:, bottom:, right:) -> {
+      let init_drawing = fn(model, top, left, bottom, right) {
+        Model(
+          ..main_model,
+          page: DrawingPage(
+            drawing.Model(
+              ..model,
+              canvas_details: drawing.CanvasDetails(
+                top:,
+                left:,
+                bottom:,
+                right:,
+                width: model.canvas_details.width,
+                height: model.canvas_details.height,
+                edge: model.canvas_details.edge,
+              ),
+            ),
+          ),
+        )
+      }
+
+      case main_model.page {
+        PartyPage(party.Model(ws: Some(ws), party: party.KnownParty(party), ..)) -> {
+          let #(drawing_model, effects) =
+            drawing.init(drawing.DrawingInit(ws:, party:))
+
+          #(
+            init_drawing(drawing_model, top, left, bottom, right),
+            effects |> effect.map(DrawingPageUpdate),
+          )
+        }
+
+        DrawingPage(model) -> #(
+          init_drawing(model, top, left, bottom, right),
+          effect.after_paint(fn(dispatch, _) {
+            dispatch(DrawingPageUpdate(drawing.Reset))
+          }),
+        )
+        _ -> panic as "DrawingInit should only be sent to DrawingPage"
+      }
+    }
+
+    messages.DrawingSent(history:, color:, direction:) -> {
+      let assert DrawingPage(model) = main_model.page
+      let model = drawing.handle_drawing_sent(model, history, color, direction)
+      #(Model(..main_model, page: DrawingPage(model)), effect.none())
+    }
+    messages.UndoSent(direction:) -> {
+      let assert DrawingPage(model) = main_model.page
+      #(
+        Model(
+          ..main_model,
+          page: DrawingPage(drawing.handle_history_change_sent(
+            model,
+            direction,
+            history_offset: 1,
+          )),
+        ),
+        effect.none(),
+      )
+    }
+    messages.RedoSent(direction:) -> {
+      let assert DrawingPage(model) = main_model.page
+      #(
+        Model(
+          ..main_model,
+          page: DrawingPage(drawing.handle_history_change_sent(
+            model,
+            direction,
+            history_offset: -1,
+          )),
+        ),
+        effect.none(),
+      )
+    }
+  }
+}
+
+// VIEW ------------------------------------------------------------------------
+
+fn view(model: Model) -> Element(Msg) {
+  case model.page {
+    DrawingPage(drawing_model) ->
+      drawing.view(drawing_model) |> element.map(DrawingPageUpdate)
+    HomePage(home_model) -> home.view(home_model) |> element.map(HomePageUpdate)
+    PartyPage(party_model) ->
+      party.view(party_model) |> element.map(PartyPageUpdate)
+    DisconnectedPage(reason) -> disconnected.view(reason)
+  }
+}
