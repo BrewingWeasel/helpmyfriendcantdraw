@@ -2,6 +2,7 @@
 
 import components/chat
 import gleam/dict
+import gleam/io
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import lustre
@@ -73,11 +74,14 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       }
     }
     WsWrapper(ws.OnBinaryMessage(_)) -> panic as "text messages only"
-    WsWrapper(ws.InvalidUrl) -> panic as "invalid websocket url"
-    WsWrapper(ws.OnOpen(ws)) -> {
-      echo "opened"
-      #(Model(..model, ws: Some(ws)), ws.send(ws, "connected"))
+    WsWrapper(ws.InvalidUrl) -> {
+      io.println_error("Invalid WebSocket URL")
+      #(model, effect.none())
     }
+    WsWrapper(ws.OnOpen(ws)) -> #(
+      Model(..model, ws: Some(ws)),
+      ws.send(ws, "connected"),
+    )
 
     WsWrapper(ws.OnClose(reason)) -> {
       case model.page {
@@ -157,7 +161,6 @@ fn server_update(main_model: Model, message) {
           effect,
         )
       }
-      // HomePage(home_model) -> home_model.party
       DrawingPage(drawing_model) -> {
         let #(new, effect) = update(drawing_model.party)
         #(
@@ -172,6 +175,7 @@ fn server_update(main_model: Model, message) {
     }
   }
 
+  io.println("Received message: " <> string.inspect(message))
   case message {
     messages.PartyCreated(code) -> {
       let assert PartyPage(model) = main_model.page

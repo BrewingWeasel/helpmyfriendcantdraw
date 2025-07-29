@@ -338,7 +338,6 @@ pub fn update(model: Model, msg: Msg) {
       }
     }
     Reset -> {
-      echo "resetting"
       clear()
       model.history |> list.reverse() |> follow_history()
       draw_tooltips(model.canvas_details)
@@ -517,9 +516,6 @@ fn clear_alternate_canvas(name: String) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "set_color")
 fn set_color(color: String) -> Nil
-
-// @external(javascript, "./drawing.ffi.mjs", "get_buffer")
-// fn get_buffer(bits: BitArray) -> String
 
 // VIEW ------------------------------------------------------------------------
 
