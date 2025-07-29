@@ -120,7 +120,6 @@ pub type Msg {
   ForwardHistory
   MouseLeave
   Reset
-  WsWrapper(ws.WebSocketEvent)
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -309,22 +308,6 @@ pub fn update(model: Model, msg: Msg) {
 
   case msg {
     MouseMoved(_, _) if !model.is_drawing -> #(model, effect.none())
-    WsWrapper(event) -> {
-      case event {
-        ws.InvalidUrl -> panic as "invalid websocket url"
-        ws.OnOpen(_socket) -> #(model, effect.none())
-        ws.OnTextMessage(msg) -> {
-          case messages.decode_server_message(msg) {
-            Ok(message) -> echo server_update(model, echo message)
-            Error(_) -> {
-              #(model, effect.none())
-            }
-          }
-        }
-        ws.OnBinaryMessage(_) -> panic as "either-or"
-        ws.OnClose(_reason) -> #(Model(..model, ws: None), effect.none())
-      }
-    }
     MouseMoved(x:, y:) -> {
       draw_point(x, y)
       #(Model(..model, history: [Point(x, y), ..model.history]), effect.none())
@@ -475,29 +458,6 @@ pub fn update(model: Model, msg: Msg) {
         effect.none(),
       )
     }
-  }
-}
-
-pub fn server_update(model, message: messages.ServerMessage) {
-  case message {
-    messages.DrawingInit(top:, left:, bottom:, right:) -> {
-      #(
-        Model(
-          ..model,
-          canvas_details: CanvasDetails(
-            top:,
-            left:,
-            bottom:,
-            right:,
-            width: model.canvas_details.width,
-            height: model.canvas_details.height,
-            edge: model.canvas_details.edge,
-          ),
-        ),
-        effect.none(),
-      )
-    }
-    _ -> #(model, effect.none())
   }
 }
 
