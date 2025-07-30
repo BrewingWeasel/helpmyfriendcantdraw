@@ -54,35 +54,40 @@ pub fn handle_chat_message(
 }
 
 pub fn view(chat: Chat, personal_id: Int) {
-  html.div([attribute.class("bg-slate-100 rounded-xl p-5 w-96 flex-none")], [
-    html.h2([], [html.text("Chat")]),
-    html.ul(
-      [attribute.class("list-none text-xl overflow-y-auto h-96")],
-      chat.messages
-        |> list.reverse()
-        |> list.map(fn(item) {
-          let #(id, name, message) = item
-          let #(color, symbol) = names.get_styling_by_id(id, personal_id)
-          html.li([], [
-            html.span([attribute.class("font-bold " <> color)], [
-              element.text(name),
-              element.text(symbol),
-              element.text(": "),
-            ]),
-            element.text(message),
-          ])
-        }),
-    ),
-    html.form([event.on_submit(fn(_) { SendChatMessage })], [
-      html.div([attribute.class("flex gap-2")], [
-        html.input([
-          attribute.class("w-full text-2xl"),
-          attribute.placeholder("Type a message..."),
-          attribute.value(chat.current_chat_message),
-          event.on_input(UpdateChatMessage),
+  html.div(
+    [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit max-h-1/3")],
+    [
+      html.h2([attribute.class("text-2xl")], [html.text("Chat")]),
+      html.ul(
+        [attribute.class("list-none text-xl overflow-y-auto h-96")],
+        chat.messages
+          |> list.reverse()
+          |> list.map(fn(item) {
+            let #(id, name, message) = item
+            let #(color, symbol) = names.get_styling_by_id(id, personal_id)
+            html.li([], [
+              html.span([attribute.class("font-bold " <> color)], [
+                element.text(name),
+                element.text(symbol),
+                element.text(": "),
+              ]),
+              element.text(message),
+            ])
+          }),
+      ),
+      html.form([event.on_submit(fn(_) { SendChatMessage })], [
+        html.div([attribute.class("flex gap-2 rounded-xl")], [
+          html.input([
+            attribute.class("w-full text-2xl"),
+            attribute.placeholder("Type a message..."),
+            attribute.value(chat.current_chat_message),
+            event.on_input(UpdateChatMessage),
+          ]),
+          html.button([attribute.class("text-2xl bg-gray-200 rounded-md p-1")], [
+            html.text("Send"),
+          ]),
         ]),
-        html.button([attribute.class("text-2xl")], [html.text("Send")]),
       ]),
-    ]),
-  ])
+    ],
+  )
 }

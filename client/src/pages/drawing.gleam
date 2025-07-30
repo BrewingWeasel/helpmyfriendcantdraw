@@ -1,5 +1,6 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import components/chat
 import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{None, Some}
@@ -120,6 +121,7 @@ pub type Msg {
   ForwardHistory
   MouseLeave
   Reset
+  ChatMessage(chat.Msg)
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -457,6 +459,13 @@ pub fn update(model: Model, msg: Msg) {
         effect.none(),
       )
     }
+    ChatMessage(chat_msg) -> {
+      let #(chat, effect) = chat.update(model.party.chat, chat_msg, model.ws)
+      #(
+        Model(..model, party: party.SharedParty(..model.party, chat:)),
+        effect |> effect.map(ChatMessage),
+      )
+    }
   }
 }
 
@@ -642,8 +651,10 @@ const ctx =
 
     ",
       ),
-      view_drawing_ui(),
-      canvas,
+      html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
+        chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
+        html.div([], [view_drawing_ui(), canvas]),
+      ]),
     ],
   )
 }
