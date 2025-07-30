@@ -151,13 +151,22 @@ pub fn view(model: Model) -> Element(Msg) {
 
       let chat = chat.view(chat, personal_id)
 
+      let is_owner = personal_id == 0
+
       let settings =
         html.div(
-          [attribute.class("grow flex p-8 justify-center bg-slate-100")],
+          [
+            attribute.class(
+              "grow flex p-8 justify-center bg-slate-100 rounded-xl",
+            ),
+          ],
           [
             html.button(
               [
-                attribute.class("bg-rose-200 p-2 h-12 rounded-xl"),
+                attribute.class(
+                  "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
+                ),
+                attribute.disabled(!is_owner || list.length(players) < 2),
                 event.on_click(Start),
               ],
               [element.text("start")],

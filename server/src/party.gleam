@@ -1,3 +1,4 @@
+import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/erlang/process
 import gleam/list
@@ -184,6 +185,10 @@ pub fn handle_message(
     }
     StartDrawing -> {
       let players = dict.keys(model.party.players)
+
+      use <- bool.lazy_guard(when: list.length(players) < 2, return: fn() {
+        actor.continue(model)
+      })
 
       let assert [first, second, ..] = players
       let assert [last, second_to_last, ..] = players |> list.reverse()
