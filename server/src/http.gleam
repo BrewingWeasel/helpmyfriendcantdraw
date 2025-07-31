@@ -245,5 +245,8 @@ fn handle_client_message(
         party.history_function(party, state.id, direction, messages.RedoSent)
       })
     }
+    messages.SetLayout(layout) -> {
+      run_party_function(state, fn(party) { party.set_layout(party, layout) })
+    }
   }
 }

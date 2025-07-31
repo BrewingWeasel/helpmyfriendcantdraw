@@ -199,8 +199,9 @@ fn server_update(main_model: Model, message) {
         SharedParty(
           ..party,
           info: shared_party.Party(
+            ..party.info,
             players: party.info.players
-            |> dict.insert(id, shared_party.Player(name: name)),
+              |> dict.insert(id, shared_party.Player(name: name)),
           ),
         )
       #(party, effect.none())
@@ -223,7 +224,10 @@ fn server_update(main_model: Model, message) {
       use party <- find_shared_party()
 
       let players = party.info.players |> dict.delete(id)
-      #(SharedParty(..party, info: shared_party.Party(players:)), effect.none())
+      #(
+        SharedParty(..party, info: shared_party.Party(..party.info, players:)),
+        effect.none(),
+      )
     }
     messages.Disconnected(reason) -> {
       #(Model(..main_model, page: DisconnectedPage(reason)), effect.none())
@@ -308,6 +312,17 @@ fn server_update(main_model: Model, message) {
         ),
         effect.none(),
       )
+    }
+    messages.LayoutSet(new_layout) -> {
+      use party <- find_shared_party()
+
+      let new_party =
+        SharedParty(
+          ..party,
+          info: shared_party.Party(..party.info, drawings_layout: new_layout),
+        )
+
+      #(new_party, effect.none())
     }
   }
 }

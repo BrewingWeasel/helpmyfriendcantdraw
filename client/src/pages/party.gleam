@@ -56,6 +56,7 @@ pub fn init(
 pub type Msg {
   RemovePlayer(id: Int)
   ChatMessage(chat.Msg)
+  SetLayout(party.DrawingsLayout)
   Start
 }
 
@@ -89,7 +90,8 @@ pub fn update(model: Model, msg: Msg) {
         Some(ws) -> {
           let assert KnownParty(party:) = model.party
           let players = party.info.players |> dict.delete(id)
-          let party = SharedParty(..party, info: party.Party(players:))
+          let party =
+            SharedParty(..party, info: party.Party(..party.info, players:))
 
           #(
             Model(..model, party: KnownParty(party)),
@@ -111,6 +113,28 @@ pub fn update(model: Model, msg: Msg) {
         Model(..model, party: KnownParty(SharedParty(..party, chat:))),
         effect |> effect.map(ChatMessage),
       )
+    }
+    SetLayout(new_layout) -> {
+      case model.ws {
+        Some(ws) -> {
+          let assert KnownParty(party:) = model.party
+          let party =
+            SharedParty(
+              ..party,
+              info: party.Party(..party.info, drawings_layout: new_layout),
+            )
+
+          #(
+            Model(..model, party: KnownParty(party)),
+            ws.send(
+              ws,
+              messages.SetLayout(new_layout)
+                |> messages.encode_client_message(),
+            ),
+          )
+        }
+        None -> #(model, effect.none())
+      }
     }
     Start -> panic as "shouldn't have to handle"
   }
@@ -153,6 +177,41 @@ pub fn view(model: Model) -> Element(Msg) {
 
       let is_owner = personal_id == 0
 
+      let one_of_options = fn(looped_options, description, viewer, current, msg) {
+        let get_pair = fn(pair) {
+          let #(a, b) = pair
+          case a == current {
+            True -> Ok(b)
+            False -> Error(Nil)
+          }
+        }
+
+        let assert Ok(next) =
+          looped_options
+          |> list.window_by_2()
+          |> list.find_map(get_pair)
+
+        let assert Ok(previous) =
+          looped_options
+          |> list.reverse()
+          |> list.window_by_2()
+          |> list.find_map(get_pair)
+
+        html.div([attribute.class("flex gap-12")], [
+          html.h2([attribute.class("text-2xl mx-4")], [html.text(description)]),
+          html.div([], [
+            html.button(
+              [attribute.class("mx-1"), event.on_click(msg(previous))],
+              [element.text("<")],
+            ),
+            viewer(current),
+            html.button([attribute.class("mx-1"), event.on_click(msg(next))], [
+              element.text(">"),
+            ]),
+          ]),
+        ])
+      }
+
       let settings =
         html.div(
           [
@@ -161,16 +220,30 @@ pub fn view(model: Model) -> Element(Msg) {
             ),
           ],
           [
-            html.button(
-              [
-                attribute.class(
-                  "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
-                ),
-                attribute.disabled(!is_owner || list.length(players) < 2),
-                event.on_click(Start),
-              ],
-              [element.text("start")],
-            ),
+            html.div([attribute.class("flex flex-col gap-2 items-center")], [
+              one_of_options(
+                [party.Horizontal, party.Vertical, party.Horizontal],
+                "layout:",
+                fn(layout) {
+                  case layout {
+                    party.Horizontal -> element.text("Horizontal")
+                    party.Vertical -> element.text("Vertical")
+                  }
+                },
+                info.drawings_layout,
+                SetLayout,
+              ),
+              html.button(
+                [
+                  attribute.class(
+                    "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
+                  ),
+                  attribute.disabled(!is_owner || list.length(players) < 2),
+                  event.on_click(Start),
+                ],
+                [element.text("start")],
+              ),
+            ]),
           ],
         )
 

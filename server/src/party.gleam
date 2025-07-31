@@ -35,6 +35,7 @@ pub type Message {
     direction: Direction,
     respond_with: fn(Direction) -> messages.ServerMessage,
   )
+  SetLayout(party.DrawingsLayout)
 }
 
 pub type PartyActor =
@@ -67,6 +68,10 @@ pub fn kick(party: PartyActor, id: Int) {
 
 pub fn start_drawing(party: PartyActor) {
   actor.send(party.data, StartDrawing)
+}
+
+pub fn set_layout(party: PartyActor, layout: party.DrawingsLayout) {
+  actor.send(party.data, SetLayout(layout))
 }
 
 pub fn send_chat_message(party: PartyActor, id: Int, message: String) {
@@ -132,6 +137,7 @@ pub fn handle_message(
 
       let new_party =
         party.Party(
+          ..model.party,
           players: model.party.players |> dict.insert(id, party.Player(name)),
         )
 
@@ -192,15 +198,24 @@ pub fn handle_message(
 
       let assert [first, second, ..] = players
       let assert [last, second_to_last, ..] = players |> list.reverse()
+
+      let #(before_dir, after_dir) = case model.party.drawings_layout {
+        party.Horizontal -> #(Left, Right)
+        party.Vertical -> #(Up, Down)
+      }
+
       let directions =
         list.window(players, 3)
         |> list.map(fn(player_ids) {
           let assert [before, current, after] = player_ids as "window of 3"
-          #(current, dict.from_list([#(Up, before), #(Down, after)]))
+          #(
+            current,
+            dict.from_list([#(before_dir, before), #(after_dir, after)]),
+          )
         })
         |> dict.from_list()
-        |> dict.insert(first, dict.from_list([#(Down, second)]))
-        |> dict.insert(last, dict.from_list([#(Up, second_to_last)]))
+        |> dict.insert(first, dict.from_list([#(after_dir, second)]))
+        |> dict.insert(last, dict.from_list([#(before_dir, second_to_last)]))
 
       directions
       |> dict.to_list()
@@ -232,6 +247,17 @@ pub fn handle_message(
       use opposite_direction <- send_drawing_message(id, direction)
       respond_with(opposite_direction)
     }
+    SetLayout(layout) -> {
+      let party = party.Party(..model.party, drawings_layout: layout)
+
+      model.connections
+      |> dict.values()
+      |> list.each(fn(connection) {
+        process.send(connection, messages.LayoutSet(layout))
+      })
+
+      actor.continue(Model(..model, party:))
+    }
   }
 }
 
@@ -244,7 +270,8 @@ fn remove_user(model: Model, id: Int) -> actor.Next(Model, Message) {
     process.send(connection, messages.UserLeft(id))
   })
 
-  let party = party.Party(players: model.party.players |> dict.delete(id))
+  let party =
+    party.Party(..model.party, players: model.party.players |> dict.delete(id))
 
   actor.continue(Model(..model, party:, connections:))
 }

@@ -12,6 +12,7 @@ pub type ClientMessage {
     color: String,
     direction: history.Direction,
   )
+  SetLayout(layout: party.DrawingsLayout)
   SendChatMessage(message: String)
   StartDrawing
   Undo(direction: history.Direction)
@@ -43,6 +44,10 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     Redo(direction) -> {
       let attached_data = [#("direction", history.direction_to_json(direction))]
       #(7, attached_data)
+    }
+    SetLayout(layout) -> {
+      let attached_data = [#("layout", party.drawings_layout_to_json(layout))]
+      #(8, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -90,6 +95,10 @@ pub fn decode_client_message(
         use direction <- decode.field("direction", history.direction_decoder())
         decode.success(Redo(direction:))
       }
+      8 -> {
+        use layout <- decode.field("layout", party.drawings_layout_decoder())
+        decode.success(SetLayout(layout:))
+      }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
@@ -111,6 +120,7 @@ pub type ServerMessage {
   )
   UndoSent(direction: history.Direction)
   RedoSent(direction: history.Direction)
+  LayoutSet(layout: party.DrawingsLayout)
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -154,6 +164,10 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     RedoSent(direction) -> {
       let attached_data = [#("direction", history.direction_to_json(direction))]
       #(9, attached_data)
+    }
+    LayoutSet(layout) -> {
+      let attached_data = [#("layout", party.drawings_layout_to_json(layout))]
+      #(10, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -216,6 +230,10 @@ pub fn decode_server_message(
       9 -> {
         use direction <- decode.field("direction", history.direction_decoder())
         decode.success(RedoSent(direction:))
+      }
+      10 -> {
+        use layout <- decode.field("layout", party.drawings_layout_decoder())
+        decode.success(LayoutSet(layout:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }
