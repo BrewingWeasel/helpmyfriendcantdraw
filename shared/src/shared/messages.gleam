@@ -17,6 +17,8 @@ pub type ClientMessage {
   StartDrawing
   Undo(direction: history.Direction)
   Redo(direction: history.Direction)
+  EndDrawing(history: List(history.HistoryItem))
+  SendFinalDrawing(history: List(history.HistoryItem))
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -48,6 +50,18 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     SetLayout(layout) -> {
       let attached_data = [#("layout", party.drawings_layout_to_json(layout))]
       #(8, attached_data)
+    }
+    EndDrawing(history) -> {
+      let attached_data = [
+        #("history", json.array(history, history.history_item_to_json)),
+      ]
+      #(9, attached_data)
+    }
+    SendFinalDrawing(history) -> {
+      let attached_data = [
+        #("history", json.array(history, history.history_item_to_json)),
+      ]
+      #(10, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -99,6 +113,20 @@ pub fn decode_client_message(
         use layout <- decode.field("layout", party.drawings_layout_decoder())
         decode.success(SetLayout(layout:))
       }
+      9 -> {
+        use history <- decode.field(
+          "history",
+          decode.list(history.history_item_decoder()),
+        )
+        decode.success(EndDrawing(history:))
+      }
+      10 -> {
+        use history <- decode.field(
+          "history",
+          decode.list(history.history_item_decoder()),
+        )
+        decode.success(SendFinalDrawing(history:))
+      }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
@@ -121,6 +149,8 @@ pub type ServerMessage {
   UndoSent(direction: history.Direction)
   RedoSent(direction: history.Direction)
   LayoutSet(layout: party.DrawingsLayout)
+  RequestDrawing
+  DrawingFinalized(history: List(history.HistoryItem), x_size: Int, y_size: Int)
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -168,6 +198,15 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     LayoutSet(layout) -> {
       let attached_data = [#("layout", party.drawings_layout_to_json(layout))]
       #(10, attached_data)
+    }
+    RequestDrawing -> #(11, [])
+    DrawingFinalized(history, x_size, y_size) -> {
+      let attached_data = [
+        #("history", json.array(history, history.history_item_to_json)),
+        #("x_size", json.int(x_size)),
+        #("y_size", json.int(y_size)),
+      ]
+      #(12, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -234,6 +273,16 @@ pub fn decode_server_message(
       10 -> {
         use layout <- decode.field("layout", party.drawings_layout_decoder())
         decode.success(LayoutSet(layout:))
+      }
+      11 -> decode.success(RequestDrawing)
+      12 -> {
+        use history <- decode.field(
+          "history",
+          decode.list(history.history_item_decoder()),
+        )
+        use x_size <- decode.field("x_size", decode.int)
+        use y_size <- decode.field("y_size", decode.int)
+        decode.success(DrawingFinalized(history:, x_size:, y_size:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }

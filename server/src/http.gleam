@@ -248,5 +248,13 @@ fn handle_client_message(
     messages.SetLayout(layout) -> {
       run_party_function(state, fn(party) { party.set_layout(party, layout) })
     }
+    messages.EndDrawing(history) -> {
+      run_party_function(state, fn(party) { party.end_drawing(party, history) })
+    }
+    messages.SendFinalDrawing(history) -> {
+      run_party_function(state, fn(party) {
+        party.send_final_drawing(party, history, state.id)
+      })
+    }
   }
 }

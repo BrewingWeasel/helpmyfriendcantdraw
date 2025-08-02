@@ -101,8 +101,8 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         left: False,
         bottom: False,
         right: False,
-        width: 800,
-        height: 600,
+        width: history.canvas_width,
+        height: history.canvas_height,
         edge: 30,
       ),
       party: init.party,
@@ -122,6 +122,7 @@ pub type Msg {
   MouseLeave
   Reset
   ChatMessage(chat.Msg)
+  EndDrawing
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -270,12 +271,12 @@ pub fn handle_history_change_sent(
   history_to_follow
   |> take_history(index + 1)
   |> list.reverse()
-  |> follow_history_for_edge(canvas_name, [], "black")
+  |> follow_history_for_other_canvas(canvas_name, [], "black")
 
   Model(..model, other_sides_history:)
 }
 
-fn follow_history_for_edge(
+pub fn follow_history_for_other_canvas(
   history: List(HistoryItem),
   canvas_name: String,
   to_draw: List(#(Int, Int)),
@@ -285,12 +286,17 @@ fn follow_history_for_edge(
     [] -> Nil
     [PenUp, ..rest] -> {
       draw_at_other_canvas(canvas_name, color, to_draw)
-      follow_history_for_edge(rest, canvas_name, [], color)
+      follow_history_for_other_canvas(rest, canvas_name, [], color)
     }
     [Point(x, y), ..rest] ->
-      follow_history_for_edge(rest, canvas_name, [#(x, y), ..to_draw], color)
+      follow_history_for_other_canvas(
+        rest,
+        canvas_name,
+        [#(x, y), ..to_draw],
+        color,
+      )
     [Color(new_color), ..rest] ->
-      follow_history_for_edge(rest, canvas_name, to_draw, new_color)
+      follow_history_for_other_canvas(rest, canvas_name, to_draw, new_color)
   }
 }
 
@@ -466,10 +472,27 @@ pub fn update(model: Model, msg: Msg) {
         effect |> effect.map(ChatMessage),
       )
     }
+    EndDrawing -> {
+      let assert Some(ws) = model.ws
+
+      let final_history = case model.history_pos {
+        0 -> model.history
+        _ -> take_history(model.history, model.history_pos + 1)
+      }
+
+      #(
+        model,
+        ws.send(
+          ws,
+          messages.EndDrawing(final_history)
+            |> messages.encode_client_message(),
+        ),
+      )
+    }
   }
 }
 
-fn take_history(history: List(HistoryItem), pos: Int) -> List(HistoryItem) {
+pub fn take_history(history: List(HistoryItem), pos: Int) -> List(HistoryItem) {
   case history {
     [] -> []
     history if pos == 0 -> [PenUp, ..history]
@@ -633,6 +656,15 @@ pub fn view(model: Model) -> Element(Msg) {
       None, None -> [center]
     })
 
+  let end_button = case model.party.id == 0 {
+    True ->
+      html.button(
+        [attribute.class("p-2 text-2xl rounded-lg"), event.on_click(EndDrawing)],
+        [element.text("show results")],
+      )
+    False -> element.none()
+  }
+
   html.div(
     [
       attribute.class(
@@ -653,7 +685,7 @@ const ctx =
       ),
       html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
-        html.div([], [view_drawing_ui(), canvas]),
+        html.div([], [view_drawing_ui(), canvas, html.div([], [end_button])]),
       ]),
     ],
   )

@@ -12,6 +12,7 @@ import pages/disconnected
 import pages/drawing
 import pages/home
 import pages/party
+import pages/results
 import shared/messages
 import shared/party.{Chat, SharedParty} as shared_party
 
@@ -36,6 +37,7 @@ type Page {
   DrawingPage(drawing.Model)
   HomePage(home.Model)
   PartyPage(party.Model)
+  ResultsPage(results.Model)
   DisconnectedPage(reason: String)
 }
 
@@ -52,6 +54,7 @@ type Msg {
   DrawingPageUpdate(drawing.Msg)
   HomePageUpdate(home.Msg)
   PartyPageUpdate(party.Msg)
+  ResultsPageUpdate(results.Msg)
   WsWrapper(ws.WebSocketEvent)
 }
 
@@ -143,6 +146,15 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(
         Model(..model, page: HomePage(new_home_model)),
         effects |> effect.map(HomePageUpdate),
+      )
+    }
+    ResultsPageUpdate(results_msg) -> {
+      let assert ResultsPage(results_model) = model.page
+      let #(new_results_model, effects) =
+        results.update(results_model, results_msg)
+      #(
+        Model(..model, page: ResultsPage(new_results_model)),
+        effects |> effect.map(ResultsPageUpdate),
       )
     }
   }
@@ -324,6 +336,45 @@ fn server_update(main_model: Model, message) {
 
       #(new_party, effect.none())
     }
+    messages.RequestDrawing -> {
+      let assert DrawingPage(drawing_model) = main_model.page
+      let assert Some(ws) = drawing_model.ws
+
+      let final_history = case drawing_model.history_pos {
+        0 -> drawing_model.history
+        _ ->
+          drawing.take_history(
+            drawing_model.history,
+            drawing_model.history_pos + 1,
+          )
+      }
+
+      #(
+        main_model,
+        ws.send(
+          ws,
+          messages.SendFinalDrawing(final_history)
+            |> messages.encode_client_message(),
+        ),
+      )
+    }
+    messages.DrawingFinalized(history, x_size, y_size) -> {
+      let assert DrawingPage(drawing_model) = main_model.page
+      #(
+        Model(
+          ..main_model,
+          page: ResultsPage(results.init(
+            history,
+            x_size,
+            y_size,
+            drawing_model.ws,
+          )),
+        ),
+        effect.after_paint(fn(dispatch, _) {
+          dispatch(ResultsPageUpdate(results.ShowDrawing))
+        }),
+      )
+    }
   }
 }
 
@@ -337,5 +388,7 @@ fn view(model: Model) -> Element(Msg) {
     PartyPage(party_model) ->
       party.view(party_model) |> element.map(PartyPageUpdate)
     DisconnectedPage(reason) -> disconnected.view(reason)
+    ResultsPage(results_model) ->
+      results.view(results_model) |> element.map(ResultsPageUpdate)
   }
 }

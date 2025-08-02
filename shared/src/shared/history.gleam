@@ -1,6 +1,10 @@
 import gleam/dynamic/decode
 import gleam/json
 
+pub const canvas_width = 800
+
+pub const canvas_height = 600
+
 pub type Direction {
   Up
   Down
