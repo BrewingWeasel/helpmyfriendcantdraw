@@ -6,12 +6,16 @@
 
     <title>🚧 drawing</title>
 
-    <!-- Uncomment this if you add the TailwindCSS integration -->
     <link rel="stylesheet" href="/priv/static/drawing.css">
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Caveat+Brush&display=swap');
     </style>
     <script type="module" src="/priv/static/drawing.mjs"></script>
+    <!-- can't redeclare canvas and ctx when doing multiple rounds of drawing -->
+    <script>
+    let canvas = undefined;
+    let ctx = undefined;
+    </script>
   </head>
 
   <body>

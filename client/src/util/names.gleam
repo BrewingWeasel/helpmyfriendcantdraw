@@ -2,9 +2,16 @@ import gleam/int
 import gleam/list
 import gleam/string
 
-const artist_descriptions = ["Awful", "Horrid", "Bad", "Terrible"]
+const artist_descriptions = [
+  "Awful", "Horrid", "Bad", "Terrible", "Miserable", "Dreadful", "Atrocious",
+  "Abysmal", "Unpleasant", "Disgusting", "Frightful", "Appalling", "Horrific",
+]
 
-const artist_names = ["Artist", "Drawer", "Painter", "Designer"]
+const artist_names = [
+  "Artist", "Painter", "Designer", "Sketcher", "Illustrator", "Craftsman",
+  "Cartoonist", "Drawer", "Creator", "Artisan", "Producer", "Sculptor",
+  "Originator",
+]
 
 pub fn new() -> String {
   [

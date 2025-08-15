@@ -676,9 +676,9 @@ pub fn view(model: Model) -> Element(Msg) {
       html.script(
         [],
         "
-const canvas =
+canvas =
   document.getElementById('drawing-canvas');
-const ctx =
+ctx =
   canvas.getContext('2d');
 
     ",

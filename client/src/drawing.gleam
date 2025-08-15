@@ -4,6 +4,7 @@ import components/chat
 import gleam/dict
 import gleam/io
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
 import lustre
 import lustre/effect
@@ -128,6 +129,29 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       )
     }
 
+    ResultsPageUpdate(results.ReturnToParty) -> {
+      let assert ResultsPage(results_model) = model.page
+
+      let id = results_model.party.id
+      let name =
+        dict.get(results_model.party.info.players, id)
+        |> result.map(fn(player) { player.name })
+        |> result.unwrap("unknown (you)")
+
+      #(
+        Model(
+          ..model,
+          page: PartyPage(party.Model(
+            name:,
+            owner: id == 0,
+            ws: results_model.ws,
+            party: party.KnownParty(results_model.party),
+          )),
+        ),
+        effect.none(),
+      )
+    }
+
     HomePageUpdate(home.JoinRoom) -> {
       let assert HomePage(home_model) = model.page
 
@@ -163,8 +187,8 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 fn server_update(main_model: Model, message) {
   let find_shared_party = fn(update) {
     case main_model.page {
-      PartyPage(party.Model(party: party.KnownParty(shared), ..) as model) -> {
-        let #(new, effect) = update(shared)
+      PartyPage(party.Model(party: party.KnownParty(shared), ws:, ..) as model) -> {
+        let #(new, effect) = update(shared, ws)
         #(
           Model(
             ..main_model,
@@ -174,11 +198,21 @@ fn server_update(main_model: Model, message) {
         )
       }
       DrawingPage(drawing_model) -> {
-        let #(new, effect) = update(drawing_model.party)
+        let #(new, effect) = update(drawing_model.party, drawing_model.ws)
         #(
           Model(
             ..main_model,
             page: DrawingPage(drawing.Model(..drawing_model, party: new)),
+          ),
+          effect,
+        )
+      }
+      ResultsPage(results_model) -> {
+        let #(new, effect) = update(results_model.party, results_model.ws)
+        #(
+          Model(
+            ..main_model,
+            page: ResultsPage(results.Model(..results_model, party: new)),
           ),
           effect,
         )
@@ -205,7 +239,7 @@ fn server_update(main_model: Model, message) {
       )
     }
     messages.UserJoined(name, id) -> {
-      use party <- find_shared_party()
+      use party, _ws <- find_shared_party()
 
       let party =
         SharedParty(
@@ -233,7 +267,7 @@ fn server_update(main_model: Model, message) {
       )
     }
     messages.UserLeft(id) -> {
-      use party <- find_shared_party()
+      use party, _ws <- find_shared_party()
 
       let players = party.info.players |> dict.delete(id)
       #(
@@ -245,7 +279,7 @@ fn server_update(main_model: Model, message) {
       #(Model(..main_model, page: DisconnectedPage(reason)), effect.none())
     }
     messages.ChatMessage(id, message) -> {
-      use party <- find_shared_party()
+      use party, _ws <- find_shared_party()
 
       let chat = chat.handle_chat_message(party.info, party.chat, id, message)
       #(SharedParty(..party, chat:), effect.none())
@@ -272,7 +306,8 @@ fn server_update(main_model: Model, message) {
       }
 
       case main_model.page {
-        PartyPage(party.Model(ws: Some(ws), party: party.KnownParty(party), ..)) -> {
+        PartyPage(party.Model(ws: Some(ws), party: party.KnownParty(party), ..))
+        | ResultsPage(results.Model(ws: Some(ws), party:, ..)) -> {
           let #(drawing_model, effects) =
             drawing.init(drawing.DrawingInit(ws:, party:))
 
@@ -326,7 +361,7 @@ fn server_update(main_model: Model, message) {
       )
     }
     messages.LayoutSet(new_layout) -> {
-      use party <- find_shared_party()
+      use party, _ws <- find_shared_party()
 
       let new_party =
         SharedParty(
@@ -368,6 +403,7 @@ fn server_update(main_model: Model, message) {
             x_size,
             y_size,
             drawing_model.ws,
+            drawing_model.party,
           )),
         ),
         effect.after_paint(fn(dispatch, _) {
