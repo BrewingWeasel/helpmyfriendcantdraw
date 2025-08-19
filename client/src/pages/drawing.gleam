@@ -93,7 +93,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         right: [],
       ),
       is_drawing: False,
-      current_color: "black",
+      current_color: "#000000",
       history_pos: 0,
       ws: Some(init.ws),
       canvas_details: CanvasDetails(
@@ -685,7 +685,11 @@ ctx =
       ),
       html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
-        html.div([], [view_drawing_ui(), canvas, html.div([], [end_button])]),
+        html.div([], [
+          view_drawing_ui(model.current_color),
+          canvas,
+          html.div([], [end_button]),
+        ]),
       ]),
     ],
   )
@@ -747,7 +751,7 @@ fn view_vertical_canvas_edge(exists, edge, main_class, model: Model) {
   }
 }
 
-fn view_drawing_ui() -> Element(Msg) {
+fn view_drawing_ui(selected_color: String) -> Element(Msg) {
   let colors = [
     "#000000", "#ffffff", "#006400", "#bdb76b", "#00008b", "#48d1cc", "#ff0000",
     "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff", "#ff00ff", "#6495ed",
@@ -757,9 +761,13 @@ fn view_drawing_ui() -> Element(Msg) {
   let color_buttons =
     colors
     |> list.map(fn(color) {
+      let outline = case color == selected_color {
+        True -> "border-2 border-slate-600"
+        False -> "border border-slate-300"
+      }
       html.button(
         [
-          attribute.class("w-6 h-6 rounded-full border border-slate-600"),
+          attribute.class("w-6 h-6 rounded-full " <> outline),
           attribute.style("background-color", color),
           event.on_click(SetColor(color)),
         ],
