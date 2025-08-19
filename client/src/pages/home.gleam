@@ -37,7 +37,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 pub fn view(model: Model) -> Element(Msg) {
   let code_entering = case model.code {
     Some(code) ->
-      html.div([attribute.class("flex")], [
+      html.form([attribute.class("flex"), event.on_submit(fn(_) { JoinRoom })], [
         html.input([
           attribute.class("text-3xl text-center mt-2 text-green-500"),
           attribute.placeholder("code"),
@@ -49,7 +49,6 @@ pub fn view(model: Model) -> Element(Msg) {
         ]),
         html.button(
           [
-            event.on_click(JoinRoom),
             attribute.class(
               "mt-2 text-center text-3xl hover:scale-110 hover:rotate-[0.5deg] tracking-tight duration-200 ease-in-out",
             ),
