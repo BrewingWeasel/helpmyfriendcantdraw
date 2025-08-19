@@ -13,7 +13,18 @@ pub fn view(reason: String) {
       html.p([attribute.class("text-5xl text-center")], [
         html.text("Disconnected"),
       ]),
-      html.p([attribute.class("text-3xl text-center")], [html.text(reason)]),
+      html.p([attribute.class("text-3xl text-rose-800 text-center")], [
+        html.text("(" <> reason <> ")"),
+      ]),
+      html.a(
+        [
+          attribute.class(
+            "mt-4 text-3xl text-center hover:scale-110 hover:rotate-[-0.5deg] tracking-tight duration-200 ease-in-out",
+          ),
+          attribute.href("/"),
+        ],
+        [html.text("Return home")],
+      ),
     ],
   )
 }
