@@ -3,13 +3,28 @@ import gleam/json
 import shared/history
 import shared/party
 
+pub type PenSettings {
+  PenSettings(color: String, size: Int)
+}
+
+fn pen_settings_to_json(pen_settings: PenSettings) -> json.Json {
+  let PenSettings(color:, size:) = pen_settings
+  json.object([#("color", json.string(color)), #("size", json.int(size))])
+}
+
+fn pen_settings_decoder() -> decode.Decoder(PenSettings) {
+  use color <- decode.field("color", decode.string)
+  use size <- decode.field("size", decode.int)
+  decode.success(PenSettings(color:, size:))
+}
+
 pub type ClientMessage {
   CreateParty(name: String)
   JoinParty(code: String, name: String)
   KickUser(id: Int)
   SendDrawing(
     history: List(history.HistoryItem),
-    color: String,
+    pen_settings: PenSettings,
     direction: history.Direction,
   )
   SetLayout(layout: party.DrawingsLayout)
@@ -31,10 +46,10 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     KickUser(id) -> #(2, [#("id", json.int(id))])
     SendChatMessage(message) -> #(3, [#("message", json.string(message))])
     StartDrawing -> #(4, [])
-    SendDrawing(history, color, direction) -> {
+    SendDrawing(history, pen_settings, direction) -> {
       let attached_data = [
         #("history", json.array(history, history.history_item_to_json)),
-        #("color", json.string(color)),
+        #("pen_settings", pen_settings_to_json(pen_settings)),
         #("direction", history.direction_to_json(direction)),
       ]
       #(5, attached_data)
@@ -97,9 +112,9 @@ pub fn decode_client_message(
           "history",
           decode.list(history.history_item_decoder()),
         )
-        use color <- decode.field("color", decode.string)
+        use pen_settings <- decode.field("pen_settings", pen_settings_decoder())
         use direction <- decode.field("direction", history.direction_decoder())
-        decode.success(SendDrawing(history:, color:, direction:))
+        decode.success(SendDrawing(history:, pen_settings:, direction:))
       }
       6 -> {
         use direction <- decode.field("direction", history.direction_decoder())
@@ -143,7 +158,7 @@ pub type ServerMessage {
   DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool)
   DrawingSent(
     history: List(history.HistoryItem),
-    color: String,
+    pen_settings: PenSettings,
     direction: history.Direction,
   )
   UndoSent(direction: history.Direction)
@@ -179,10 +194,10 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
       ]
       #(6, attached_data)
     }
-    DrawingSent(history, color, direction) -> {
+    DrawingSent(history, pen_settings, direction) -> {
       let attached_data = [
         #("history", json.array(history, history.history_item_to_json)),
-        #("color", json.string(color)),
+        #("pen_settings", pen_settings_to_json(pen_settings)),
         #("direction", history.direction_to_json(direction)),
       ]
       #(7, attached_data)
@@ -258,9 +273,9 @@ pub fn decode_server_message(
           "history",
           decode.list(history.history_item_decoder()),
         )
-        use color <- decode.field("color", decode.string)
+        use pen_settings <- decode.field("pen_settings", pen_settings_decoder())
         use direction <- decode.field("direction", history.direction_decoder())
-        decode.success(DrawingSent(history:, color:, direction:))
+        decode.success(DrawingSent(history:, pen_settings:, direction:))
       }
       8 -> {
         use direction <- decode.field("direction", history.direction_decoder())

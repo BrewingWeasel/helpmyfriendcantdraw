@@ -15,6 +15,7 @@ pub type Direction {
 pub type HistoryItem {
   Point(x: Int, y: Int)
   Color(color: String)
+  Size(size: Int)
   PenUp
 }
 
@@ -28,7 +29,8 @@ pub fn history_item_to_json(history_item: HistoryItem) -> json.Json {
       ])
     Color(color:) ->
       json.object([#("t", json.int(1)), #("color", json.string(color))])
-    PenUp -> json.object([#("t", json.int(2))])
+    Size(size:) -> json.object([#("t", json.int(2)), #("size", json.int(size))])
+    PenUp -> json.object([#("t", json.int(3))])
   }
 }
 
@@ -44,7 +46,11 @@ pub fn history_item_decoder() -> decode.Decoder(HistoryItem) {
       use color <- decode.field("color", decode.string)
       decode.success(Color(color:))
     }
-    2 -> decode.success(PenUp)
+    2 -> {
+      use size <- decode.field("size", decode.int)
+      decode.success(Size(size:))
+    }
+    3 -> decode.success(PenUp)
     _ -> decode.failure(PenUp, "Direction")
   }
 }

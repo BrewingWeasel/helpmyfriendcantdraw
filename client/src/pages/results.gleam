@@ -9,6 +9,7 @@ import lustre/event
 import lustre_websocket as ws
 import pages/drawing
 import shared/history
+import shared/messages
 import shared/party
 
 pub type Model {
@@ -44,7 +45,11 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     ShowDrawing -> {
       model.history
       |> list.reverse()
-      |> drawing.follow_history_for_other_canvas(canvas_id, [], "black")
+      |> drawing.follow_history_for_other_canvas(
+        canvas_id,
+        [],
+        messages.PenSettings(drawing.default_color, drawing.default_size),
+      )
       #(model, effect.none())
     }
     ChatMessage(chat_msg) -> {

@@ -327,9 +327,10 @@ fn server_update(main_model: Model, message) {
       }
     }
 
-    messages.DrawingSent(history:, color:, direction:) -> {
+    messages.DrawingSent(history:, pen_settings:, direction:) -> {
       let assert DrawingPage(model) = main_model.page
-      let model = drawing.handle_drawing_sent(model, history, color, direction)
+      let model =
+        drawing.handle_drawing_sent(model, history, pen_settings, direction)
       #(Model(..main_model, page: DrawingPage(model)), effect.none())
     }
     messages.UndoSent(direction:) -> {

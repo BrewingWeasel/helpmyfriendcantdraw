@@ -5,7 +5,7 @@ import gleam/list
 import gleam/otp/actor
 import gleam/result
 import shared/history.{type Direction, Down, Left, Right, Up}
-import shared/messages
+import shared/messages.{type PenSettings}
 import shared/party
 import ws
 
@@ -38,7 +38,7 @@ pub type Message {
   SendDrawing(
     id: Id,
     items: List(history.HistoryItem),
-    color: String,
+    pen_settings: messages.PenSettings,
     direction: Direction,
   )
   HistoryFunction(
@@ -107,10 +107,10 @@ pub fn send_drawing(
   party: PartyActor,
   id: Int,
   items: List(history.HistoryItem),
-  color: String,
+  pen_settings: PenSettings,
   direction: Direction,
 ) {
-  actor.send(party.data, SendDrawing(id, items, color, direction))
+  actor.send(party.data, SendDrawing(id, items, pen_settings, direction))
 }
 
 pub fn history_function(
@@ -310,9 +310,9 @@ pub fn handle_message(
         Model(..model, directions:, full_drawing_x_size:, full_drawing_y_size:),
       )
     }
-    SendDrawing(id, items, color, direction) -> {
+    SendDrawing(id, items, pen_settings, direction) -> {
       use opposite_direction <- send_drawing_message(id, direction)
-      messages.DrawingSent(items, color, opposite_direction)
+      messages.DrawingSent(items, pen_settings, opposite_direction)
     }
     HistoryFunction(id, direction, respond_with) -> {
       use opposite_direction <- send_drawing_message(id, direction)

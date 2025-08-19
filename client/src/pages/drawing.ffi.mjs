@@ -1,11 +1,11 @@
-export function draw_at_other_canvas(canvas_name, color, strokes) {
+export function draw_at_other_canvas(canvas_name, pen_settings, strokes) {
   const canvas = document.getElementById(canvas_name);
   const ctx = canvas.getContext('2d');
 
   ctx.beginPath();
 
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 12;
+  ctx.strokeStyle = pen_settings.color;
+  ctx.lineWidth = pen_settings.size;;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -25,7 +25,6 @@ export function draw_at_other_canvas(canvas_name, color, strokes) {
 
 
 export function draw_point(x, y) {
-  ctx.lineWidth = 12;
   // ctx.lineWidth =
   //   brushSize.value;
   ctx.lineCap = "round";
@@ -60,6 +59,10 @@ export function clear_alternate_canvas(canvas_name) {
 
 export function set_color(color) {
   ctx.strokeStyle = color;
+}
+
+export function set_size(size) {
+  ctx.lineWidth = size;
 }
 
 export function get_buffer(x) {

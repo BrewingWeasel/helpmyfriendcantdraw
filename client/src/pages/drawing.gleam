@@ -2,6 +2,7 @@
 
 import components/chat
 import gleam/dynamic/decode
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -11,12 +12,16 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 import shared/history.{
-  type HistoryItem, Color, Down, Left, PenUp, Point, Right, Up,
+  type HistoryItem, Color, Down, Left, PenUp, Point, Right, Size, Up,
 }
-import shared/messages
+import shared/messages.{type PenSettings, PenSettings}
 import shared/party
 
 import lustre_websocket as ws
+
+pub const default_size = 12
+
+pub const default_color = "#000000"
 
 // MODEL -----------------------------------------------------------------------
 
@@ -60,7 +65,7 @@ pub type Model {
     other_sides_history: OtherSidesHistory,
     personal_edges_history: PersonsalEdgesHistory,
     history: List(HistoryItem),
-    current_color: String,
+    pen_settings: PenSettings,
     history_pos: Int,
     ws: option.Option(ws.WebSocket),
     canvas_details: CanvasDetails,
@@ -75,7 +80,7 @@ pub type DrawingInit {
 pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
   let model =
     Model(
-      history: [Color("black")],
+      history: [Color(default_color), Size(default_size)],
       other_sides_history: OtherSidesHistory(
         top: [],
         left: [],
@@ -93,7 +98,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         right: [],
       ),
       is_drawing: False,
-      current_color: "#000000",
+      pen_settings: PenSettings(color: default_color, size: default_size),
       history_pos: 0,
       ws: Some(init.ws),
       canvas_details: CanvasDetails(
@@ -116,6 +121,7 @@ pub type Msg {
   MouseMoved(x: Int, y: Int)
   StartDrawing(x: Int, y: Int)
   SetColor(color: String)
+  SetSize(size: Int)
   StopDrawing
   BackHistory
   ForwardHistory
@@ -128,11 +134,16 @@ pub type Msg {
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
 fn draw_at_other_canvas(
   canvas_name: String,
-  color: String,
+  pen_settings: PenSettings,
   strokes: List(#(Int, Int)),
 ) -> Nil
 
-pub fn handle_drawing_sent(model: Model, history, color, direction) {
+pub fn handle_drawing_sent(
+  model: Model,
+  history: List(HistoryItem),
+  pen_settings: PenSettings,
+  direction: history.Direction,
+) -> Model {
   let #(canvas_name, updated_other_sides) = case direction {
     Up -> {
       let past_history = case model.other_sides_history.top_history_index {
@@ -144,7 +155,11 @@ pub fn handle_drawing_sent(model: Model, history, color, direction) {
         "t",
         OtherSidesHistory(
           ..model.other_sides_history,
-          top: list.append([PenUp, ..history], [Color(color), ..past_history]),
+          top: list.append([PenUp, ..history], [
+            Color(pen_settings.color),
+            Size(pen_settings.size),
+            ..past_history
+          ]),
           top_history_index: 0,
         ),
       )
@@ -159,7 +174,11 @@ pub fn handle_drawing_sent(model: Model, history, color, direction) {
         "l",
         OtherSidesHistory(
           ..model.other_sides_history,
-          left: list.append([PenUp, ..history], [Color(color), ..past_history]),
+          left: list.append([PenUp, ..history], [
+            Color(pen_settings.color),
+            Size(pen_settings.size),
+            ..past_history
+          ]),
           left_history_index: 0,
         ),
       )
@@ -174,7 +193,11 @@ pub fn handle_drawing_sent(model: Model, history, color, direction) {
         "b",
         OtherSidesHistory(
           ..model.other_sides_history,
-          bottom: list.append([PenUp, ..history], [Color(color), ..past_history]),
+          bottom: list.append([PenUp, ..history], [
+            Color(pen_settings.color),
+            Size(pen_settings.size),
+            ..past_history
+          ]),
           bottom_history_index: 0,
         ),
       )
@@ -189,7 +212,11 @@ pub fn handle_drawing_sent(model: Model, history, color, direction) {
         "r",
         OtherSidesHistory(
           ..model.other_sides_history,
-          right: list.append([PenUp, ..history], [Color(color), ..past_history]),
+          right: list.append([PenUp, ..history], [
+            Color(pen_settings.color),
+            Size(pen_settings.size),
+            ..past_history
+          ]),
           right_history_index: 0,
         ),
       )
@@ -197,7 +224,7 @@ pub fn handle_drawing_sent(model: Model, history, color, direction) {
   }
   draw_at_other_canvas(
     canvas_name <> "-canvas",
-    color,
+    pen_settings,
     history
       |> list.map(fn(item) {
         case item {
@@ -271,7 +298,11 @@ pub fn handle_history_change_sent(
   history_to_follow
   |> take_history(index + 1)
   |> list.reverse()
-  |> follow_history_for_other_canvas(canvas_name, [], "black")
+  |> follow_history_for_other_canvas(
+    canvas_name,
+    [],
+    PenSettings(color: default_color, size: default_size),
+  )
 
   Model(..model, other_sides_history:)
 }
@@ -280,23 +311,36 @@ pub fn follow_history_for_other_canvas(
   history: List(HistoryItem),
   canvas_name: String,
   to_draw: List(#(Int, Int)),
-  color: String,
+  pen_settings: PenSettings,
 ) -> Nil {
   case history {
     [] -> Nil
     [PenUp, ..rest] -> {
-      draw_at_other_canvas(canvas_name, color, to_draw)
-      follow_history_for_other_canvas(rest, canvas_name, [], color)
+      draw_at_other_canvas(canvas_name, pen_settings, to_draw)
+      follow_history_for_other_canvas(rest, canvas_name, [], pen_settings)
     }
     [Point(x, y), ..rest] ->
       follow_history_for_other_canvas(
         rest,
         canvas_name,
         [#(x, y), ..to_draw],
-        color,
+        pen_settings,
       )
-    [Color(new_color), ..rest] ->
-      follow_history_for_other_canvas(rest, canvas_name, to_draw, new_color)
+    [Color(color), ..rest] ->
+      follow_history_for_other_canvas(
+        rest,
+        canvas_name,
+        to_draw,
+        PenSettings(..pen_settings, color:),
+      )
+    [Size(size), ..rest] -> {
+      follow_history_for_other_canvas(
+        rest,
+        canvas_name,
+        to_draw,
+        PenSettings(..pen_settings, size:),
+      )
+    }
   }
 }
 
@@ -330,7 +374,12 @@ pub fn update(model: Model, msg: Msg) {
         Model(
           ..model,
           is_drawing: True,
-          history: [Point(x, y), Color(model.current_color), ..new_history],
+          history: [
+            Point(x, y),
+            Size(model.pen_settings.size),
+            Color(model.pen_settings.color),
+            ..new_history
+          ],
           history_pos: 0,
         ),
         effect.none(),
@@ -397,7 +446,8 @@ pub fn update(model: Model, msg: Msg) {
         |> result.values()
         |> effect.batch()
 
-      set_color(model.current_color)
+      set_color(model.pen_settings.color)
+      set_size(model.pen_settings.size)
 
       #(Model(..model, history_pos:), messages)
     }
@@ -449,7 +499,8 @@ pub fn update(model: Model, msg: Msg) {
             |> result.values()
             |> effect.batch()
 
-          set_color(model.current_color)
+          set_color(model.pen_settings.color)
+          set_size(model.pen_settings.size)
 
           #(Model(..model, history_pos:), messages)
         }
@@ -458,10 +509,22 @@ pub fn update(model: Model, msg: Msg) {
     SetColor(color) -> {
       set_color(color)
       #(
-        Model(..model, current_color: color, history: [
-          Color(color),
-          ..model.history
-        ]),
+        Model(
+          ..model,
+          pen_settings: PenSettings(..model.pen_settings, color:),
+          history: [Color(color), ..model.history],
+        ),
+        effect.none(),
+      )
+    }
+    SetSize(size) -> {
+      set_size(size)
+      #(
+        Model(
+          ..model,
+          pen_settings: PenSettings(..model.pen_settings, size:),
+          history: [Size(size), ..model.history],
+        ),
         effect.none(),
       )
     }
@@ -507,6 +570,7 @@ fn display_history(history: List(HistoryItem)) -> List(HistoryItem) {
       PenUp -> "up"
       Point(_, _) -> ""
       Color(color) -> color
+      Size(size) -> int.to_string(size)
     }
   })
   |> echo
@@ -526,6 +590,10 @@ fn follow_history(history: List(HistoryItem)) -> Nil {
     }
     [Color(color), ..rest] -> {
       set_color(color)
+      follow_history(rest)
+    }
+    [Size(size), ..rest] -> {
+      set_size(size)
       follow_history(rest)
     }
   }
@@ -548,6 +616,9 @@ fn clear_alternate_canvas(name: String) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "set_color")
 fn set_color(color: String) -> Nil
+
+@external(javascript, "./drawing.ffi.mjs", "set_size")
+fn set_size(size: Int) -> Nil
 
 // VIEW ------------------------------------------------------------------------
 
@@ -686,7 +757,7 @@ ctx =
       html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
         html.div([], [
-          view_drawing_ui(model.current_color),
+          view_drawing_ui(model.pen_settings),
           canvas,
           html.div([], [end_button]),
         ]),
@@ -751,7 +822,7 @@ fn view_vertical_canvas_edge(exists, edge, main_class, model: Model) {
   }
 }
 
-fn view_drawing_ui(selected_color: String) -> Element(Msg) {
+fn view_drawing_ui(pen_settings: PenSettings) -> Element(Msg) {
   let colors = [
     "#000000", "#ffffff", "#006400", "#bdb76b", "#00008b", "#48d1cc", "#ff0000",
     "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff", "#ff00ff", "#6495ed",
@@ -761,7 +832,7 @@ fn view_drawing_ui(selected_color: String) -> Element(Msg) {
   let color_buttons =
     colors
     |> list.map(fn(color) {
-      let outline = case color == selected_color {
+      let outline = case color == pen_settings.color {
         True -> "border-2 border-slate-600"
         False -> "border border-slate-300"
       }
@@ -774,10 +845,37 @@ fn view_drawing_ui(selected_color: String) -> Element(Msg) {
         [],
       )
     })
+
+  let size_buttons =
+    [12, 36, 64, 128]
+    |> list.index_map(fn(size, i) {
+      let outline = case size == pen_settings.size {
+        True -> "bg-slate-600"
+        False -> "border border-slate-300"
+      }
+      let icon_size = i * 4 + 9
+      html.button(
+        [
+          attribute.class("rounded-full " <> outline),
+          attribute.style("width", int.to_string(icon_size) <> "px"),
+          attribute.style("height", int.to_string(icon_size) <> "px"),
+          event.on_click(SetSize(size)),
+        ],
+        [],
+      )
+    })
+
   html.div([attribute.class("flex p-2")], [
     html.div(
-      [attribute.class("flex gap-1 p-2 rounded-lg shadow-sm bg-slate-100")],
-      color_buttons,
+      [
+        attribute.class(
+          "flex justify-center items-center gap-1 p-2 rounded-lg shadow-sm bg-slate-100",
+        ),
+      ],
+      list.append(color_buttons, [
+        html.div([attribute.class("ml-6")], []),
+        ..size_buttons
+      ]),
     ),
     html.button([event.on_click(BackHistory)], [element.text("back")]),
     html.button([event.on_click(ForwardHistory)], [element.text("forward")]),
@@ -834,7 +932,7 @@ fn stop_drawing(model: Model) {
     case history {
       [] -> option.None
       _ ->
-        messages.SendDrawing(history, model.current_color, direction)
+        messages.SendDrawing(history, model.pen_settings, direction)
         |> messages.encode_client_message()
         |> ws.send(ws, _)
         |> option.Some
