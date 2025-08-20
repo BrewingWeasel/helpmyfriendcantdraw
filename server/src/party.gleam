@@ -1,11 +1,13 @@
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/erlang/process
+import gleam/int
 import gleam/list
 import gleam/otp/actor
 import gleam/result
+import logging
 import shared/history.{type Direction, Down, Left, Right, Up}
-import shared/messages.{type PenSettings}
+import shared/messages
 import shared/party
 import ws
 
@@ -31,24 +33,8 @@ pub type NeighborDetails {
 
 pub type Message {
   Join(conn: ws.Connection, name: String, reply_to: process.Subject(Int))
+  ClientMessage(id: Id, message: messages.ClientMessage)
   Leave(id: Id)
-  Kick(id: Id)
-  SendMessage(id: Id, message: String)
-  StartDrawing
-  SendDrawing(
-    id: Id,
-    items: List(history.HistoryItem),
-    pen_settings: messages.PenSettings,
-    direction: Direction,
-  )
-  HistoryFunction(
-    id: Id,
-    direction: Direction,
-    respond_with: fn(Direction) -> messages.ServerMessage,
-  )
-  SetLayout(party.DrawingsLayout)
-  EndDrawing(history: List(history.HistoryItem))
-  SendFinalDrawing(history: List(history.HistoryItem), id: Id)
 }
 
 pub type PartyActor =
@@ -75,51 +61,16 @@ pub fn join(party: PartyActor, name: String, conn: ws.Connection) {
   actor.call(party.data, 100, Join(conn:, name:, reply_to: _))
 }
 
-pub fn leave(party: PartyActor, id: Int) {
+pub fn client_message(
+  party: PartyActor,
+  id: Id,
+  message: messages.ClientMessage,
+) {
+  actor.send(party.data, ClientMessage(id, message))
+}
+
+pub fn leave(party: PartyActor, id: Id) {
   actor.send(party.data, Leave(id))
-}
-
-pub fn kick(party: PartyActor, id: Int) {
-  actor.send(party.data, Kick(id))
-}
-
-pub fn start_drawing(party: PartyActor) {
-  actor.send(party.data, StartDrawing)
-}
-
-pub fn set_layout(party: PartyActor, layout: party.DrawingsLayout) {
-  actor.send(party.data, SetLayout(layout))
-}
-
-pub fn end_drawing(party: PartyActor, history) {
-  actor.send(party.data, EndDrawing(history))
-}
-
-pub fn send_final_drawing(party: PartyActor, history, id) {
-  actor.send(party.data, SendFinalDrawing(history, id))
-}
-
-pub fn send_chat_message(party: PartyActor, id: Id, message: String) {
-  actor.send(party.data, SendMessage(id, message))
-}
-
-pub fn send_drawing(
-  party: PartyActor,
-  id: Int,
-  items: List(history.HistoryItem),
-  pen_settings: PenSettings,
-  direction: Direction,
-) {
-  actor.send(party.data, SendDrawing(id, items, pen_settings, direction))
-}
-
-pub fn history_function(
-  party: PartyActor,
-  id: Int,
-  direction: Direction,
-  respond_with,
-) {
-  actor.send(party.data, HistoryFunction(id, direction, respond_with))
 }
 
 pub fn handle_message(
@@ -197,153 +148,181 @@ pub fn handle_message(
         _ -> remove_user(model, id)
       }
     }
-    Kick(id) -> {
-      case dict.get(model.connections, id) {
-        Ok(conn) -> {
-          process.send(
-            conn,
-            messages.Disconnected("You were kicked from the party"),
-          )
+    ClientMessage(id, message) -> {
+      let require_permissions = fn(run) {
+        case id {
+          0 -> run()
+          _ -> {
+            logging.log(
+              logging.Warning,
+              "Invalid permissions for user " <> int.to_string(id),
+            )
+            actor.continue(model)
+          }
         }
-        Error(_) -> Nil
-      }
-      remove_user(model, id)
-    }
-    SendMessage(id, message) -> {
-      model.connections
-      |> dict.values()
-      |> list.each(fn(connection) {
-        process.send(connection, messages.ChatMessage(id, message))
-      })
-
-      actor.continue(model)
-    }
-    StartDrawing -> {
-      let players = dict.keys(model.party.players)
-
-      use <- bool.lazy_guard(when: list.length(players) < 2, return: fn() {
-        actor.continue(model)
-      })
-
-      let assert [first, second, ..] = players
-      let assert [last, second_to_last, ..] = players |> list.reverse()
-
-      let #(before_dir, after_dir) = case model.party.drawings_layout {
-        party.Horizontal -> #(Left, Right)
-        party.Vertical -> #(Up, Down)
       }
 
-      let standard_x_offset = case model.party.drawings_layout {
-        party.Horizontal -> 1
-        party.Vertical -> 0
-      }
+      case message {
+        messages.KickUser(id_to_kick) -> {
+          use <- require_permissions()
+          case dict.get(model.connections, id_to_kick) {
+            Ok(conn) -> {
+              process.send(
+                conn,
+                messages.Disconnected("You were kicked from the party"),
+              )
+            }
+            Error(_) -> Nil
+          }
+          remove_user(model, id_to_kick)
+        }
+        messages.SendChatMessage(message) -> {
+          model.connections
+          |> dict.values()
+          |> list.each(fn(connection) {
+            process.send(connection, messages.ChatMessage(id, message))
+          })
 
-      let standard_y_offset = case model.party.drawings_layout {
-        party.Horizontal -> 0
-        party.Vertical -> 1
-      }
+          actor.continue(model)
+        }
+        messages.StartDrawing -> {
+          let players = dict.keys(model.party.players)
 
-      let num_players = list.length(players)
+          use <- bool.lazy_guard(when: list.length(players) < 2, return: fn() {
+            actor.continue(model)
+          })
 
-      let #(full_drawing_x_size, full_drawing_y_size) = case
-        model.party.drawings_layout
-      {
-        party.Horizontal -> #(num_players, 1)
-        party.Vertical -> #(1, num_players)
-      }
+          let assert [first, second, ..] = players
+          let assert [last, second_to_last, ..] = players |> list.reverse()
 
-      let directions =
-        list.window(players, 3)
-        |> list.index_map(fn(player_ids, i) {
-          let assert [before, current, after] = player_ids as "window of 3"
-          #(
-            current,
-            NeighborDetails(
-              x_offset: standard_x_offset * { i + 1 },
-              y_offset: standard_y_offset * { i + 1 },
-              neighbors: dict.from_list([
-                #(before_dir, before),
-                #(after_dir, after),
-              ]),
-            ),
-          )
-        })
-        |> dict.from_list()
-        |> dict.insert(
-          first,
-          NeighborDetails(
-            x_offset: 0,
-            y_offset: 0,
-            neighbors: dict.from_list([#(after_dir, second)]),
-          ),
-        )
-        |> dict.insert(
-          last,
-          NeighborDetails(
-            x_offset: standard_x_offset * { num_players - 1 },
-            y_offset: standard_y_offset * { num_players - 1 },
-            neighbors: dict.from_list([#(before_dir, second_to_last)]),
-          ),
-        )
+          let #(before_dir, after_dir) = case model.party.drawings_layout {
+            party.Horizontal -> #(Left, Right)
+            party.Vertical -> #(Up, Down)
+          }
 
-      directions
-      |> dict.to_list()
-      |> list.each(fn(item) {
-        let #(id, NeighborDetails(neighbors:, ..)) = item
+          let standard_x_offset = case model.party.drawings_layout {
+            party.Horizontal -> 1
+            party.Vertical -> 0
+          }
 
-        case dict.get(model.connections, id) {
-          Ok(conn) ->
-            process.send(
-              conn,
-              messages.DrawingInit(
-                top: dict.has_key(neighbors, Up),
-                left: dict.has_key(neighbors, Left),
-                right: dict.has_key(neighbors, Right),
-                bottom: dict.has_key(neighbors, Down),
+          let standard_y_offset = case model.party.drawings_layout {
+            party.Horizontal -> 0
+            party.Vertical -> 1
+          }
+
+          let num_players = list.length(players)
+
+          let #(full_drawing_x_size, full_drawing_y_size) = case
+            model.party.drawings_layout
+          {
+            party.Horizontal -> #(num_players, 1)
+            party.Vertical -> #(1, num_players)
+          }
+
+          let directions =
+            list.window(players, 3)
+            |> list.index_map(fn(player_ids, i) {
+              let assert [before, current, after] = player_ids as "window of 3"
+              #(
+                current,
+                NeighborDetails(
+                  x_offset: standard_x_offset * { i + 1 },
+                  y_offset: standard_y_offset * { i + 1 },
+                  neighbors: dict.from_list([
+                    #(before_dir, before),
+                    #(after_dir, after),
+                  ]),
+                ),
+              )
+            })
+            |> dict.from_list()
+            |> dict.insert(
+              first,
+              NeighborDetails(
+                x_offset: 0,
+                y_offset: 0,
+                neighbors: dict.from_list([#(after_dir, second)]),
               ),
             )
-          Error(_) -> Nil
+            |> dict.insert(
+              last,
+              NeighborDetails(
+                x_offset: standard_x_offset * { num_players - 1 },
+                y_offset: standard_y_offset * { num_players - 1 },
+                neighbors: dict.from_list([#(before_dir, second_to_last)]),
+              ),
+            )
+
+          directions
+          |> dict.to_list()
+          |> list.each(fn(item) {
+            let #(id, NeighborDetails(neighbors:, ..)) = item
+
+            case dict.get(model.connections, id) {
+              Ok(conn) ->
+                process.send(
+                  conn,
+                  messages.DrawingInit(
+                    top: dict.has_key(neighbors, Up),
+                    left: dict.has_key(neighbors, Left),
+                    right: dict.has_key(neighbors, Right),
+                    bottom: dict.has_key(neighbors, Down),
+                  ),
+                )
+              Error(_) -> Nil
+            }
+          })
+
+          actor.continue(
+            Model(
+              ..model,
+              directions:,
+              full_drawing_x_size:,
+              full_drawing_y_size:,
+            ),
+          )
         }
-      })
-
-      actor.continue(
-        Model(..model, directions:, full_drawing_x_size:, full_drawing_y_size:),
-      )
-    }
-    SendDrawing(id, items, pen_settings, direction) -> {
-      use opposite_direction <- send_drawing_message(id, direction)
-      messages.DrawingSent(items, pen_settings, opposite_direction)
-    }
-    HistoryFunction(id, direction, respond_with) -> {
-      use opposite_direction <- send_drawing_message(id, direction)
-      respond_with(opposite_direction)
-    }
-    SetLayout(layout) -> {
-      let party = party.Party(..model.party, drawings_layout: layout)
-
-      model.connections
-      |> dict.values()
-      |> list.each(fn(connection) {
-        process.send(connection, messages.LayoutSet(layout))
-      })
-
-      actor.continue(Model(..model, party:))
-    }
-    EndDrawing(history) -> {
-      model.connections
-      |> dict.to_list()
-      |> list.each(fn(pair) {
-        let #(id, connection) = pair
-        case id {
-          0 -> Nil
-          _ -> process.send(connection, messages.RequestDrawing)
+        messages.SendDrawing(items, pen_settings, direction) -> {
+          use opposite_direction <- send_drawing_message(id, direction)
+          messages.DrawingSent(items, pen_settings, opposite_direction)
         }
-      })
+        messages.SetLayout(layout) -> {
+          let party = party.Party(..model.party, drawings_layout: layout)
 
-      actor.continue(add_drawing_to_history(model, 0, history))
-    }
-    SendFinalDrawing(history, id) -> {
-      actor.continue(add_drawing_to_history(model, id, history))
+          model.connections
+          |> dict.values()
+          |> list.each(fn(connection) {
+            process.send(connection, messages.LayoutSet(layout))
+          })
+
+          actor.continue(Model(..model, party:))
+        }
+        messages.EndDrawing(history) -> {
+          model.connections
+          |> dict.to_list()
+          |> list.each(fn(pair) {
+            let #(id, connection) = pair
+            case id {
+              0 -> Nil
+              _ -> process.send(connection, messages.RequestDrawing)
+            }
+          })
+
+          actor.continue(add_drawing_to_history(model, 0, history))
+        }
+        messages.SendFinalDrawing(history) ->
+          actor.continue(add_drawing_to_history(model, id, history))
+        messages.Undo(direction) -> {
+          use opposite_direction <- send_drawing_message(id, direction)
+          messages.UndoSent(opposite_direction)
+        }
+        messages.Redo(direction) -> {
+          use opposite_direction <- send_drawing_message(id, direction)
+          messages.RedoSent(opposite_direction)
+        }
+        messages.CreateParty(..) | messages.JoinParty(..) ->
+          panic as "should not be handled here"
+      }
     }
   }
 }

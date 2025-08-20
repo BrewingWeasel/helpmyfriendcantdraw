@@ -2,6 +2,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
+import gleam/int
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/supervision
@@ -60,8 +61,6 @@ fn start(static_directory, index_html) {
       _ -> wisp.not_found()
     }
   }
-
-  // panic as "lol"
 
   let assert Ok(_) =
     fn(request: Request(Connection)) -> Response(ResponseData) {
@@ -134,7 +133,7 @@ fn handle_generic_ws_message(state, message, conn) {
     mist.Binary(binary) -> {
       logging.log(
         Warning,
-        "Received binary message: " <> string.inspect(binary),
+        "Ignoring received binary message: " <> string.inspect(binary),
       )
       mist.continue(state)
     }
@@ -142,7 +141,10 @@ fn handle_generic_ws_message(state, message, conn) {
       logging.log(Debug, "Sent message: " <> string.inspect(message))
       case ws.send(conn, server_message) {
         Error(e) ->
-          logging.log(Warning, "unable to send message: " <> string.inspect(e))
+          logging.log(
+            logging.Error,
+            "unable to send message: " <> string.inspect(e),
+          )
         Ok(_) -> Nil
       }
 
@@ -179,10 +181,10 @@ fn handle_client_message(
   message: messages.ClientMessage,
   conn: mist.WebsocketConnection,
 ) -> WebsocketState {
-  logging.log(Debug, "Received message: " <> string.inspect(message))
-
   case message {
     messages.CreateParty(name:) -> {
+      logging.log(Debug, "Received message: " <> string.inspect(message))
+
       let #(party_code, party) =
         parties.create_party(state.manager, name, state.subject)
       logging.log(Notice, "Party created with code: " <> party_code)
@@ -198,6 +200,11 @@ fn handle_client_message(
       )
     }
     messages.JoinParty(code:, name:) -> {
+      logging.log(
+        Debug,
+        "[" <> code <> "]: Received message: " <> string.inspect(message),
+      )
+
       case parties.get_party(state.manager, code) {
         Ok(party) -> {
           let id = party.join(party, name, state.subject)
@@ -213,47 +220,18 @@ fn handle_client_message(
         }
       }
     }
-    messages.KickUser(id:) -> {
-      case state.party, state.owner {
-        Some(party), True -> {
-          party.kick(party, id)
-          state
-        }
-        _, _ -> state
-      }
-    }
-    messages.SendChatMessage(message:) -> {
+    message -> {
+      logging.log(
+        logging.Debug,
+        "["
+          <> option.unwrap(state.code, "????")
+          <> ":"
+          <> int.to_string(state.id)
+          <> "]: Received message: "
+          <> string.inspect(message),
+      )
       run_party_function(state, fn(party) {
-        party.send_chat_message(party, state.id, message)
-      })
-    }
-    messages.StartDrawing -> {
-      run_party_function(state, fn(party) { party.start_drawing(party) })
-    }
-    messages.SendDrawing(items, color, direction) -> {
-      run_party_function(state, fn(party) {
-        party.send_drawing(party, state.id, items, color, direction)
-      })
-    }
-    messages.Undo(direction) -> {
-      run_party_function(state, fn(party) {
-        party.history_function(party, state.id, direction, messages.UndoSent)
-      })
-    }
-    messages.Redo(direction) -> {
-      run_party_function(state, fn(party) {
-        party.history_function(party, state.id, direction, messages.RedoSent)
-      })
-    }
-    messages.SetLayout(layout) -> {
-      run_party_function(state, fn(party) { party.set_layout(party, layout) })
-    }
-    messages.EndDrawing(history) -> {
-      run_party_function(state, fn(party) { party.end_drawing(party, history) })
-    }
-    messages.SendFinalDrawing(history) -> {
-      run_party_function(state, fn(party) {
-        party.send_final_drawing(party, history, state.id)
+        party.client_message(party, state.id, message)
       })
     }
   }

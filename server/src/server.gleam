@@ -7,6 +7,7 @@ import wisp
 
 pub fn main() {
   logging.configure()
+  logging.set_level(logging.Debug)
 
   let assert Ok(priv_directory) = wisp.priv_directory("server")
   let static_directory = priv_directory <> "/static"
