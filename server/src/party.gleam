@@ -24,6 +24,7 @@ pub type Model {
     needed_ids: List(Id),
     full_drawing_x_size: Int,
     full_drawing_y_size: Int,
+    removed_players: List(Id),
   )
 }
 
@@ -42,16 +43,19 @@ pub type PartyActor =
 
 pub fn create(player: String, conn: ws.Connection) -> PartyActor {
   let assert Ok(actor) =
-    actor.new(Model(
-      party_member_index: 0,
-      party: party.new(player),
-      connections: dict.from_list([#(0, conn)]),
-      directions: dict.new(),
-      full_drawing: [],
-      needed_ids: [0],
-      full_drawing_x_size: 0,
-      full_drawing_y_size: 0,
-    ))
+    actor.new(
+      Model(
+        party_member_index: 0,
+        party: party.new(player),
+        connections: dict.from_list([#(0, conn)]),
+        directions: dict.new(),
+        full_drawing: [],
+        needed_ids: [0],
+        full_drawing_x_size: 0,
+        full_drawing_y_size: 0,
+        removed_players: [],
+      ),
+    )
     |> actor.on_message(handle_message)
     |> actor.start()
   actor
@@ -145,7 +149,11 @@ pub fn handle_message(
           })
           actor.stop()
         }
-        _ -> remove_user(model, id)
+        _ ->
+          case list.contains(model.removed_players, id) {
+            False -> remove_user(model, id, "disconnected")
+            True -> actor.continue(model)
+          }
       }
     }
     ClientMessage(id, message) -> {
@@ -162,12 +170,6 @@ pub fn handle_message(
         }
       }
 
-      let send_to_all = fn(msg) {
-        model.connections
-        |> dict.values()
-        |> list.each(fn(connection) { process.send(connection, msg) })
-      }
-
       case message {
         messages.KickUser(id_to_kick) -> {
           use <- require_permissions()
@@ -180,15 +182,18 @@ pub fn handle_message(
             }
             Error(_) -> Nil
           }
-          remove_user(model, id_to_kick)
+          remove_user(model, id_to_kick, reason: "was kicked from the party")
         }
         messages.SendChatMessage(message) -> {
           let name = case dict.get(model.party.players, id) {
             Ok(player) -> player.name
-            Error(_) -> "unknown"
+            Error(Nil) -> "unknown"
           }
 
-          send_to_all(messages.ChatMessage(party.User(id:, name:, message:)))
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.User(id:, name:, message:)),
+          )
 
           actor.continue(model)
         }
@@ -296,7 +301,7 @@ pub fn handle_message(
         messages.SetLayout(layout) -> {
           let party = party.Party(..model.party, drawings_layout: layout)
 
-          send_to_all(messages.LayoutSet(layout))
+          send_to_all(model.connections, messages.LayoutSet(layout))
 
           actor.continue(Model(..model, party:))
         }
@@ -376,14 +381,24 @@ fn add_drawing_to_history(model: Model, id, history) {
   }
 }
 
-fn remove_user(model: Model, id: Int) -> actor.Next(Model, Message) {
+fn remove_user(
+  model: Model,
+  id: Int,
+  reason reason: String,
+) -> actor.Next(Model, Message) {
   let connections = model.connections |> dict.delete(id)
 
-  connections
-  |> dict.values()
-  |> list.each(fn(connection) {
-    process.send(connection, messages.UserLeft(id))
-  })
+  send_to_all(connections, messages.UserLeft(id))
+
+  let name = case dict.get(model.party.players, id) {
+    Ok(player) -> player.name
+    Error(Nil) -> "unknown"
+  }
+
+  send_to_all(
+    connections,
+    messages.ChatMessage(party.Server(name <> " " <> reason)),
+  )
 
   let party =
     party.Party(..model.party, players: model.party.players |> dict.delete(id))
@@ -395,6 +410,13 @@ fn remove_user(model: Model, id: Int) -> actor.Next(Model, Message) {
       connections:,
       needed_ids: model.needed_ids
         |> list.filter(fn(needed_id) { needed_id != id }),
+      removed_players: [id, ..model.removed_players],
     ),
   )
+}
+
+fn send_to_all(connections, msg) {
+  connections
+  |> dict.values()
+  |> list.each(fn(connection) { process.send(connection, msg) })
 }
