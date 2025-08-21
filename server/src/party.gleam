@@ -5,6 +5,7 @@ import gleam/int
 import gleam/list
 import gleam/otp/actor
 import gleam/result
+import gleam/string
 import logging
 import shared/history.{type Direction, Down, Left, Right, Up}
 import shared/messages
@@ -151,7 +152,7 @@ pub fn handle_message(
         }
         _ ->
           case list.contains(model.removed_players, id) {
-            False -> remove_user(model, id, "disconnected")
+            False -> remove_users(model, [id], "disconnected")
             True -> actor.continue(model)
           }
       }
@@ -173,18 +174,11 @@ pub fn handle_message(
       case message {
         messages.KickUser(id_to_kick) -> {
           use <- require_permissions()
-          case dict.get(model.connections, id_to_kick) {
-            Ok(conn) -> {
-              process.send(
-                conn,
-                messages.Disconnected("You were kicked from the party"),
-              )
-            }
-            Error(_) -> Nil
-          }
-          remove_user(model, id_to_kick, reason: "was kicked from the party")
+          kick_users(model, [id_to_kick])
         }
         messages.SendChatMessage(message) -> {
+          use <- try_to_run_command(model, id, message)
+
           let name = case dict.get(model.party.players, id) {
             Ok(player) -> player.name
             Error(Nil) -> "unknown"
@@ -335,6 +329,67 @@ pub fn handle_message(
   }
 }
 
+fn kick_users(model: Model, ids: List(Id)) -> actor.Next(Model, Message) {
+  list.each(ids, fn(id_to_kick) {
+    case dict.get(model.connections, id_to_kick) {
+      Ok(conn) -> {
+        process.send(
+          conn,
+          messages.Disconnected("You were kicked from the party"),
+        )
+      }
+      Error(_) -> Nil
+    }
+  })
+  remove_users(model, ids, reason: "was kicked from the party")
+}
+
+fn try_to_run_command(
+  model: Model,
+  id: Id,
+  message: String,
+  otherwise: fn() -> actor.Next(Model, Message),
+) -> actor.Next(Model, Message) {
+  use <- bool.lazy_guard(id != 0, return: otherwise)
+  case message {
+    "/kick " <> users -> {
+      let possible_users = string.split(users, " ")
+
+      let matching_users =
+        model.party.players
+        |> dict.to_list()
+        |> list.filter_map(fn(pair) {
+          let #(user_id, player) = pair
+          case list.contains(possible_users, player.name) {
+            True -> Ok(user_id)
+            False -> Error(Nil)
+          }
+        })
+
+      case matching_users {
+        [] -> {
+          let _ =
+            model.connections
+            |> dict.get(0)
+            |> result.map(fn(leader_connection) {
+              process.send(
+                leader_connection,
+                messages.ChatMessage(party.Server(
+                  "No users found when running " <> message,
+                )),
+              )
+            })
+          Nil
+        }
+        _ -> Nil
+      }
+
+      kick_users(model, matching_users)
+    }
+    _ -> otherwise()
+  }
+}
+
 fn add_drawing_to_history(model: Model, id, history) {
   case dict.get(model.directions, id) {
     Ok(NeighborDetails(x_offset:, y_offset:, ..)) -> {
@@ -381,27 +436,35 @@ fn add_drawing_to_history(model: Model, id, history) {
   }
 }
 
-fn remove_user(
+fn remove_users(
   model: Model,
-  id: Int,
+  ids: List(Int),
   reason reason: String,
 ) -> actor.Next(Model, Message) {
-  let connections = model.connections |> dict.delete(id)
+  let connections =
+    model.connections |> dict.filter(fn(id, _) { !list.contains(ids, id) })
 
-  send_to_all(connections, messages.UserLeft(id))
+  ids
+  |> list.each(fn(id) {
+    send_to_all(connections, messages.UserLeft(id))
 
-  let name = case dict.get(model.party.players, id) {
-    Ok(player) -> player.name
-    Error(Nil) -> "unknown"
-  }
+    let name = case dict.get(model.party.players, id) {
+      Ok(player) -> player.name
+      Error(Nil) -> "unknown"
+    }
 
-  send_to_all(
-    connections,
-    messages.ChatMessage(party.Server(name <> " " <> reason)),
-  )
+    send_to_all(
+      connections,
+      messages.ChatMessage(party.Server(name <> " " <> reason)),
+    )
+  })
 
   let party =
-    party.Party(..model.party, players: model.party.players |> dict.delete(id))
+    party.Party(
+      ..model.party,
+      players: model.party.players
+        |> dict.filter(fn(id, _) { !list.contains(ids, id) }),
+    )
 
   actor.continue(
     Model(
@@ -409,8 +472,8 @@ fn remove_user(
       party:,
       connections:,
       needed_ids: model.needed_ids
-        |> list.filter(fn(needed_id) { needed_id != id }),
-      removed_players: [id, ..model.removed_players],
+        |> list.filter(fn(needed_id) { !list.contains(ids, needed_id) }),
+      removed_players: list.append(ids, model.removed_players),
     ),
   )
 }
