@@ -34,7 +34,11 @@ pub type NeighborDetails {
 }
 
 pub type Message {
-  Join(conn: ws.Connection, name: String, reply_to: process.Subject(Int))
+  Join(
+    conn: ws.Connection,
+    name: String,
+    reply_to: process.Subject(Result(Id, String)),
+  )
   ClientMessage(id: Id, message: messages.ClientMessage)
   Leave(id: Id)
 }
@@ -111,6 +115,14 @@ pub fn handle_message(
 
   case message {
     Join(conn:, name:, reply_to:) -> {
+      use <- bool.lazy_guard(
+        when: dict.size(model.connections) >= 8,
+        return: fn() {
+          actor.send(reply_to, Error("Party is already full"))
+          actor.continue(model)
+        },
+      )
+
       let id = model.party_member_index + 1
 
       model.connections
@@ -127,7 +139,7 @@ pub fn handle_message(
 
       process.send(conn, messages.PartyInfo(new_party, id))
 
-      actor.send(reply_to, id)
+      actor.send(reply_to, Ok(id))
 
       let model =
         Model(

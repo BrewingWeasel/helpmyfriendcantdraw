@@ -6,6 +6,7 @@ import gleam/int
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/supervision
+import gleam/result
 import gleam/string
 import gleam/string_tree
 import logging.{Debug, Notice, Warning}
@@ -205,17 +206,19 @@ fn handle_client_message(
         "[" <> code <> "]: Received message: " <> string.inspect(message),
       )
 
-      case parties.get_party(state.manager, code) {
-        Ok(party) -> {
-          let id = party.join(party, name, state.subject)
+      case
+        parties.get_party(state.manager, code)
+        |> result.replace_error("No party found with code " <> code)
+        |> result.try(fn(party) {
+          party.join(party, name, state.subject)
+          |> result.map(fn(id) { #(party, id) })
+        })
+      {
+        Ok(#(party, id)) -> {
           WebsocketState(..state, party: Some(party), id:, code: Some(code))
         }
-        Error(Nil) -> {
-          let _ =
-            ws.send(
-              conn,
-              messages.Disconnected("No party found with code " <> code),
-            )
+        Error(err) -> {
+          let _ = ws.send(conn, messages.Disconnected(err))
           state
         }
       }
