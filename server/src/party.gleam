@@ -26,7 +26,13 @@ pub type Model {
     full_drawing_x_size: Int,
     full_drawing_y_size: Int,
     removed_players: List(Id),
+    muted_status: MutedStatus,
   )
+}
+
+pub type MutedStatus {
+  Individuals(List(Id))
+  Party
 }
 
 pub type NeighborDetails {
@@ -48,19 +54,18 @@ pub type PartyActor =
 
 pub fn create(player: String, conn: ws.Connection) -> PartyActor {
   let assert Ok(actor) =
-    actor.new(
-      Model(
-        party_member_index: 0,
-        party: party.new(player),
-        connections: dict.from_list([#(0, conn)]),
-        directions: dict.new(),
-        full_drawing: [],
-        needed_ids: [0],
-        full_drawing_x_size: 0,
-        full_drawing_y_size: 0,
-        removed_players: [],
-      ),
-    )
+    actor.new(Model(
+      party_member_index: 0,
+      party: party.new(player),
+      connections: dict.from_list([#(0, conn)]),
+      directions: dict.new(),
+      full_drawing: [],
+      needed_ids: [0],
+      full_drawing_x_size: 0,
+      full_drawing_y_size: 0,
+      removed_players: [],
+      muted_status: Individuals([]),
+    ))
     |> actor.on_message(handle_message)
     |> actor.start()
   actor
@@ -183,6 +188,17 @@ pub fn handle_message(
         }
       }
 
+      let respond_with_server_message = fn(server_message) {
+        case dict.get(model.connections, id) {
+          Ok(connection) ->
+            process.send(
+              connection,
+              messages.ChatMessage(party.Server(server_message)),
+            )
+          Error(_) -> Nil
+        }
+      }
+
       case message {
         messages.KickUser(id_to_kick) -> {
           use <- require_permissions()
@@ -191,17 +207,54 @@ pub fn handle_message(
         messages.SendChatMessage(message) -> {
           use <- try_to_run_command(model, id, message)
 
-          let name = case dict.get(model.party.players, id) {
-            Ok(player) -> player.name
-            Error(Nil) -> "unknown"
+          let send = fn() {
+            let name = case dict.get(model.party.players, id) {
+              Ok(player) -> player.name
+              Error(Nil) -> "unknown"
+            }
+
+            send_to_all(
+              model.connections,
+              messages.ChatMessage(party.User(id:, name:, message:)),
+            )
+
+            actor.continue(model)
           }
 
-          send_to_all(
-            model.connections,
-            messages.ChatMessage(party.User(id:, name:, message:)),
-          )
+          case model.muted_status, id {
+            _, 0 -> send()
+            Party, _ -> {
+              logging.log(
+                logging.Debug,
+                "User "
+                  <> int.to_string(id)
+                  <> " tried to send a message but the party is muted",
+              )
+              respond_with_server_message(
+                "You cannot send messages while the party is muted",
+              )
 
-          actor.continue(model)
+              actor.continue(model)
+            }
+            Individuals(muted_users), _ -> {
+              use <- bool.lazy_guard(
+                when: list.contains(muted_users, id),
+                return: fn() {
+                  logging.log(
+                    logging.Debug,
+                    "User "
+                      <> int.to_string(id)
+                      <> " tried to send a message but the is muted",
+                  )
+                  respond_with_server_message(
+                    "You cannot send messages while you are muted",
+                  )
+                  actor.continue(model)
+                },
+              )
+              send()
+            }
+          }
         }
         messages.StartDrawing -> {
           let players = dict.keys(model.party.players)
@@ -363,40 +416,110 @@ fn try_to_run_command(
   otherwise: fn() -> actor.Next(Model, Message),
 ) -> actor.Next(Model, Message) {
   use <- bool.lazy_guard(id != 0, return: otherwise)
+
+  let get_matching_users = fn(users) {
+    let possible_users = string.split(users, " ")
+
+    let matching_users =
+      model.party.players
+      |> dict.to_list()
+      |> list.filter_map(fn(pair) {
+        let #(user_id, player) = pair
+        case list.contains(possible_users, player.name) {
+          True -> Ok(user_id)
+          False -> Error(Nil)
+        }
+      })
+
+    case matching_users {
+      [] -> {
+        let _ =
+          model.connections
+          |> dict.get(0)
+          |> result.map(fn(leader_connection) {
+            process.send(
+              leader_connection,
+              messages.ChatMessage(party.Server(
+                "No users found when running " <> message,
+              )),
+            )
+          })
+        Nil
+      }
+      _ -> Nil
+    }
+    matching_users
+  }
+
   case message {
     "/kick " <> users -> {
-      let possible_users = string.split(users, " ")
-
-      let matching_users =
-        model.party.players
-        |> dict.to_list()
-        |> list.filter_map(fn(pair) {
-          let #(user_id, player) = pair
-          case list.contains(possible_users, player.name) {
-            True -> Ok(user_id)
-            False -> Error(Nil)
-          }
-        })
-
-      case matching_users {
-        [] -> {
-          let _ =
-            model.connections
-            |> dict.get(0)
-            |> result.map(fn(leader_connection) {
-              process.send(
-                leader_connection,
-                messages.ChatMessage(party.Server(
-                  "No users found when running " <> message,
-                )),
-              )
-            })
-          Nil
-        }
-        _ -> Nil
-      }
-
+      let matching_users = get_matching_users(users)
       kick_users(model, matching_users)
+    }
+    "/mute" <> users -> {
+      case string.trim(users) {
+        "" -> {
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.Server("The party was muted")),
+          )
+          actor.continue(Model(..model, muted_status: Party))
+        }
+        users -> {
+          let matching_users = get_matching_users(users)
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.Server("Muted users: " <> users)),
+          )
+          actor.continue(
+            Model(..model, muted_status: Individuals(matching_users)),
+          )
+        }
+      }
+    }
+    "/unmute" <> users -> {
+      case string.trim(users) {
+        "" -> {
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.Server("Unmuted party")),
+          )
+          actor.continue(Model(..model, muted_status: Individuals([])))
+        }
+        users -> {
+          let matching_users = get_matching_users(users)
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.Server("Unmuted " <> users)),
+          )
+          case model.muted_status {
+            Party ->
+              actor.continue(
+                Model(
+                  ..model,
+                  muted_status: Individuals(
+                    model.connections
+                    |> dict.keys()
+                    |> list.filter(fn(id) {
+                      id != 0 || !list.contains(matching_users, id)
+                    }),
+                  ),
+                ),
+              )
+            Individuals(already_muted) -> {
+              actor.continue(
+                Model(
+                  ..model,
+                  muted_status: Individuals(
+                    already_muted
+                    |> list.filter(fn(id) { !list.contains(matching_users, id) }),
+                  ),
+                ),
+              )
+            }
+          }
+        }
+      }
     }
     _ -> otherwise()
   }
