@@ -27,6 +27,7 @@ pub type Model {
     full_drawing_y_size: Int,
     removed_players: List(Id),
     muted_status: MutedStatus,
+    locked: Bool,
   )
 }
 
@@ -65,6 +66,7 @@ pub fn create(player: String, conn: ws.Connection) -> PartyActor {
       full_drawing_y_size: 0,
       removed_players: [],
       muted_status: Individuals([]),
+      locked: False,
     ))
     |> actor.on_message(handle_message)
     |> actor.start()
@@ -120,6 +122,11 @@ pub fn handle_message(
 
   case message {
     Join(conn:, name:, reply_to:) -> {
+      use <- bool.lazy_guard(when: model.locked, return: fn() {
+        actor.send(reply_to, Error("Party is locked"))
+        actor.continue(model)
+      })
+
       use <- bool.lazy_guard(
         when: dict.size(model.connections) >= 8,
         return: fn() {
@@ -455,6 +462,20 @@ fn try_to_run_command(
     "/kick " <> users -> {
       let matching_users = get_matching_users(users)
       kick_users(model, matching_users)
+    }
+    "/lock" -> {
+      send_to_all(
+        model.connections,
+        messages.ChatMessage(party.Server("The party was locked")),
+      )
+      actor.continue(Model(..model, locked: True))
+    }
+    "/unlock" -> {
+      send_to_all(
+        model.connections,
+        messages.ChatMessage(party.Server("The party was unlocked")),
+      )
+      actor.continue(Model(..model, locked: False))
     }
     "/mute" <> users -> {
       case string.trim(users) {
