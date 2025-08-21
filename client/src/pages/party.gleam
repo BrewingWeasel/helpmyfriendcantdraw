@@ -168,8 +168,10 @@ pub fn view(model: Model) -> Element(Msg) {
           let #(id, player) = item
           let #(color, symbol) = names.get_styling_by_id(id, personal_id)
           html.li([attribute.class(color), ..removing_attributes(id)], [
-            element.text(player.name),
-            element.text(symbol),
+            html.span([attribute.class("flex gap-1 items-center")], [
+              element.text(player.name),
+              symbol,
+            ]),
           ])
         })
 
@@ -213,50 +215,41 @@ pub fn view(model: Model) -> Element(Msg) {
       }
 
       let settings =
-        html.div(
-          [
-            attribute.class(
-              "grow flex p-8 justify-center bg-slate-100 rounded-xl",
+        html.div([attribute.class("grow p-5 bg-slate-100 rounded-xl")], [
+          html.h2([attribute.class("text-3xl")], [html.text("Settings")]),
+          html.div([attribute.class("flex flex-col gap-2 items-center")], [
+            one_of_options(
+              [party.Horizontal, party.Vertical, party.Horizontal],
+              "layout:",
+              fn(layout) {
+                case layout {
+                  party.Horizontal -> element.text("Horizontal")
+                  party.Vertical -> element.text("Vertical")
+                }
+              },
+              info.drawings_layout,
+              SetLayout,
             ),
-          ],
-          [
-            html.div([attribute.class("flex flex-col gap-2 items-center")], [
-              one_of_options(
-                [party.Horizontal, party.Vertical, party.Horizontal],
-                "layout:",
-                fn(layout) {
-                  case layout {
-                    party.Horizontal -> element.text("Horizontal")
-                    party.Vertical -> element.text("Vertical")
-                  }
-                },
-                info.drawings_layout,
-                SetLayout,
-              ),
-              html.button(
-                [
-                  attribute.class(
-                    "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
-                  ),
-                  attribute.disabled(!is_owner || list.length(players) < 2),
-                  event.on_click(Start),
-                ],
-                [element.text("start")],
-              ),
-            ]),
-          ],
-        )
+            html.button(
+              [
+                attribute.class(
+                  "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
+                ),
+                attribute.disabled(!is_owner || list.length(players) < 2),
+                event.on_click(Start),
+              ],
+              [element.text("start")],
+            ),
+          ]),
+        ])
 
       html.div([attribute.class("flex gap-8 w-screen mx-12")], [
         chat |> element.map(ChatMessage),
         html.div(
           [attribute.class("bg-slate-100 rounded-xl p-5 w-64 flex-none")],
           [
-            html.h2([], [html.text("Players")]),
-            html.ul(
-              [attribute.class("list-disc list-inside text-2xl")],
-              players,
-            ),
+            html.h2([attribute.class("text-3xl")], [html.text("Players")]),
+            html.ul([attribute.class("text-xl")], players),
           ],
         ),
         settings,

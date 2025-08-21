@@ -1,6 +1,7 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import components/chat
+import components/icons
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
@@ -730,8 +731,11 @@ pub fn view(model: Model) -> Element(Msg) {
   let end_button = case model.party.id == 0 {
     True ->
       html.button(
-        [attribute.class("p-2 text-2xl rounded-lg"), event.on_click(EndDrawing)],
-        [element.text("show results")],
+        [
+          attribute.class("p-1 mt-1 text-2xl bg-rose-200 rounded-lg"),
+          event.on_click(EndDrawing),
+        ],
+        [element.text("Force End")],
       )
     False -> element.none()
   }
@@ -872,14 +876,29 @@ fn view_drawing_ui(pen_settings: PenSettings) -> Element(Msg) {
           "flex justify-center items-center gap-1 p-2 rounded-lg shadow-sm bg-slate-100",
         ),
       ],
-      list.append(color_buttons, [
-        html.div([attribute.class("ml-6")], []),
-        ..size_buttons
+      list.flatten([
+        color_buttons,
+        [html.div([attribute.class("ml-6")], [])],
+        size_buttons,
+        [html.div([attribute.class("ml-6")], [])],
+        [
+          html.button(
+            [
+              attribute.class("bg-slate-200 rounded-lg"),
+              event.on_click(BackHistory),
+            ],
+            [icons.undo()],
+          ),
+          html.button(
+            [
+              attribute.class("bg-slate-200 rounded-lg"),
+              event.on_click(ForwardHistory),
+            ],
+            [icons.redo()],
+          ),
+        ],
       ]),
     ),
-    html.button([event.on_click(BackHistory)], [element.text("back")]),
-    html.button([event.on_click(ForwardHistory)], [element.text("forward")]),
-    html.button([event.on_click(Reset)], [element.text("reset")]),
   ])
 }
 

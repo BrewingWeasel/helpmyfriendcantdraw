@@ -1,6 +1,10 @@
+import components/icons
 import gleam/int
 import gleam/list
 import gleam/string
+import lustre/attribute
+import lustre/element
+import lustre/element/html
 
 const artist_descriptions = [
   "Awful", "Horrid", "Bad", "Terrible", "Miserable", "Dreadful", "Atrocious",
@@ -30,11 +34,19 @@ pub fn get_styling_by_id(id: Int, personal_id: Int) {
     2 -> "text-rose-300"
     _ -> "text-amber-500"
   }
+
+  let icon_wrapper = fn(icon) {
+    html.span([attribute.class("flex items-center")], [
+      element.text("("),
+      icon,
+      element.text(")"),
+    ])
+  }
+
   let symbol = case id {
-    // 0 if personal_id == 0 -> " (L|U)"
-    0 -> " (L)"
-    _ if id == personal_id -> " (U)"
-    _ -> ""
+    0 -> icon_wrapper(icons.crown())
+    id if id == personal_id -> icon_wrapper(icons.person())
+    _ -> element.none()
   }
   #(color, symbol)
 }

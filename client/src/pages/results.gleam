@@ -83,10 +83,10 @@ pub fn view(model: Model) {
           |> element.map(ChatMessage),
         html.button(
           [
-            attribute.class("bg-rose-200 rounded-lg p-1 mt-2 max-h-12"),
+            attribute.class("bg-rose-200 rounded-lg p-1 mt-2 max-h-12 text-2xl"),
             event.on_click(ReturnToParty),
           ],
-          [html.text("Return to Party")],
+          [html.text("Party Menu")],
         ),
       ],
     ),

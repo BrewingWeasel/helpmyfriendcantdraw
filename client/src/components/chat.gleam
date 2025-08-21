@@ -45,7 +45,7 @@ pub fn view(chat: Chat, personal_id: Int) {
   html.div(
     [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit max-h-1/3")],
     [
-      html.h2([attribute.class("text-2xl")], [html.text("Chat")]),
+      html.h2([attribute.class("text-3xl")], [html.text("Chat")]),
       html.ul(
         [attribute.class("list-none text-xl overflow-y-auto h-96")],
         chat.messages
@@ -54,22 +54,24 @@ pub fn view(chat: Chat, personal_id: Int) {
             let message_elements = case message {
               party.User(id:, name:, message:) -> {
                 let #(color, symbol) = names.get_styling_by_id(id, personal_id)
-                [
-                  html.span([attribute.class("font-bold " <> color)], [
-                    element.text(name),
-                    element.text(symbol),
-                    element.text(": "),
-                  ]),
+                html.span([attribute.class("flex gap-1 items-center")], [
+                  html.span(
+                    [
+                      attribute.class(
+                        "font-bold flex gap-1 items-center " <> color,
+                      ),
+                    ],
+                    [element.text(name), symbol, element.text(": ")],
+                  ),
                   element.text(message),
-                ]
+                ])
               }
-              party.Server(message:) -> [
+              party.Server(message:) ->
                 html.span([attribute.class("text-gray-500 italic")], [
                   element.text(message),
-                ]),
-              ]
+                ])
             }
-            html.li([], message_elements)
+            html.li([], [message_elements])
           }),
       ),
       html.form([event.on_submit(fn(_) { SendChatMessage })], [
