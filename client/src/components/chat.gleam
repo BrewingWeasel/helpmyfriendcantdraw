@@ -1,4 +1,3 @@
-import gleam/dict
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
@@ -38,18 +37,7 @@ pub fn update(model: Chat, msg: Msg, ws) -> #(Chat, Effect(Msg)) {
   }
 }
 
-pub fn handle_chat_message(
-  info: party.Party,
-  chat: Chat,
-  id: Int,
-  message: String,
-) -> Chat {
-  let name = case dict.get(info.players, id) {
-    Ok(player) -> player.name
-    Error(Nil) -> "Unknown"
-  }
-
-  let new_message = #(id, name, message)
+pub fn handle_chat_message(chat: Chat, new_message: party.ChatMessage) -> Chat {
   Chat(..chat, messages: [new_message, ..chat.messages])
 }
 
@@ -62,17 +50,26 @@ pub fn view(chat: Chat, personal_id: Int) {
         [attribute.class("list-none text-xl overflow-y-auto h-96")],
         chat.messages
           |> list.reverse()
-          |> list.map(fn(item) {
-            let #(id, name, message) = item
-            let #(color, symbol) = names.get_styling_by_id(id, personal_id)
-            html.li([], [
-              html.span([attribute.class("font-bold " <> color)], [
-                element.text(name),
-                element.text(symbol),
-                element.text(": "),
-              ]),
-              element.text(message),
-            ])
+          |> list.map(fn(message) {
+            let message_elements = case message {
+              party.User(id:, name:, message:) -> {
+                let #(color, symbol) = names.get_styling_by_id(id, personal_id)
+                [
+                  html.span([attribute.class("font-bold " <> color)], [
+                    element.text(name),
+                    element.text(symbol),
+                    element.text(": "),
+                  ]),
+                  element.text(message),
+                ]
+              }
+              party.Server(message:) -> [
+                html.span([attribute.class("text-gray-500 italic")], [
+                  element.text(message),
+                ]),
+              ]
+            }
+            html.li([], message_elements)
           }),
       ),
       html.form([event.on_submit(fn(_) { SendChatMessage })], [

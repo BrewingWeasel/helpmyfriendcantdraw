@@ -34,7 +34,43 @@ pub type SharedParty {
 }
 
 pub type Chat {
-  Chat(messages: List(#(Int, String, String)), current_chat_message: String)
+  Chat(messages: List(ChatMessage), current_chat_message: String)
+}
+
+pub type ChatMessage {
+  User(id: Int, name: String, message: String)
+  Server(message: String)
+}
+
+pub fn chat_message_to_json(chat_message: ChatMessage) -> json.Json {
+  case chat_message {
+    User(id:, name:, message:) ->
+      json.object([
+        #("t", json.int(0)),
+        #("id", json.int(id)),
+        #("name", json.string(name)),
+        #("message", json.string(message)),
+      ])
+    Server(message:) ->
+      json.object([#("t", json.int(1)), #("message", json.string(message))])
+  }
+}
+
+pub fn chat_message_decoder() -> decode.Decoder(ChatMessage) {
+  use variant <- decode.field("t", decode.int)
+  case variant {
+    0 -> {
+      use id <- decode.field("id", decode.int)
+      use name <- decode.field("name", decode.string)
+      use message <- decode.field("message", decode.string)
+      decode.success(User(id:, name:, message:))
+    }
+    1 -> {
+      use message <- decode.field("message", decode.string)
+      decode.success(Server(message:))
+    }
+    _ -> decode.failure(Server("invalid message"), "ChatMessage")
+  }
 }
 
 pub fn to_json(party: Party) -> json.Json {

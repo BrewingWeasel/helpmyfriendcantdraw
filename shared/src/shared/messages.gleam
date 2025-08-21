@@ -154,7 +154,7 @@ pub type ServerMessage {
   PartyInfo(party: party.Party, id: Int)
   UserLeft(id: Int)
   Disconnected(reason: String)
-  ChatMessage(id: Int, message: String)
+  ChatMessage(message: party.ChatMessage)
   DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool)
   DrawingSent(
     history: List(history.HistoryItem),
@@ -181,9 +181,8 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     ])
     UserLeft(id) -> #(3, [#("id", json.int(id))])
     Disconnected(reason) -> #(4, [#("reason", json.string(reason))])
-    ChatMessage(id, message) -> #(5, [
-      #("id", json.int(id)),
-      #("message", json.string(message)),
+    ChatMessage(message) -> #(5, [
+      #("message", party.chat_message_to_json(message)),
     ])
     DrawingInit(top, left, right, bottom) -> {
       let attached_data = [
@@ -257,9 +256,8 @@ pub fn decode_server_message(
         decode.success(Disconnected(reason:))
       }
       5 -> {
-        use id <- decode.field("id", decode.int)
-        use message <- decode.field("message", decode.string)
-        decode.success(ChatMessage(id:, message:))
+        use message <- decode.field("message", party.chat_message_decoder())
+        decode.success(ChatMessage(message:))
       }
       6 -> {
         use top <- decode.field("top", decode.bool)

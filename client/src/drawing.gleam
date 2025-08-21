@@ -278,10 +278,10 @@ fn server_update(main_model: Model, message) {
     messages.Disconnected(reason) -> {
       #(Model(..main_model, page: DisconnectedPage(reason)), effect.none())
     }
-    messages.ChatMessage(id, message) -> {
+    messages.ChatMessage(message) -> {
       use party, _ws <- find_shared_party()
 
-      let chat = chat.handle_chat_message(party.info, party.chat, id, message)
+      let chat = chat.handle_chat_message(party.chat, message)
       #(SharedParty(..party, chat:), effect.none())
     }
     messages.DrawingInit(top:, left:, bottom:, right:) -> {

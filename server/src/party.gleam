@@ -162,6 +162,12 @@ pub fn handle_message(
         }
       }
 
+      let send_to_all = fn(msg) {
+        model.connections
+        |> dict.values()
+        |> list.each(fn(connection) { process.send(connection, msg) })
+      }
+
       case message {
         messages.KickUser(id_to_kick) -> {
           use <- require_permissions()
@@ -177,11 +183,12 @@ pub fn handle_message(
           remove_user(model, id_to_kick)
         }
         messages.SendChatMessage(message) -> {
-          model.connections
-          |> dict.values()
-          |> list.each(fn(connection) {
-            process.send(connection, messages.ChatMessage(id, message))
-          })
+          let name = case dict.get(model.party.players, id) {
+            Ok(player) -> player.name
+            Error(_) -> "unknown"
+          }
+
+          send_to_all(messages.ChatMessage(party.User(id:, name:, message:)))
 
           actor.continue(model)
         }
@@ -289,11 +296,7 @@ pub fn handle_message(
         messages.SetLayout(layout) -> {
           let party = party.Party(..model.party, drawings_layout: layout)
 
-          model.connections
-          |> dict.values()
-          |> list.each(fn(connection) {
-            process.send(connection, messages.LayoutSet(layout))
-          })
+          send_to_all(messages.LayoutSet(layout))
 
           actor.continue(Model(..model, party:))
         }
