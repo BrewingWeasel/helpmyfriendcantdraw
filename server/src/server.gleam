@@ -18,6 +18,7 @@ pub fn main() {
   let initializer_subject = process.new_subject()
 
   let settings_name = process.new_name("settings")
+  let parties_manager_name = process.new_name("parties_manager")
 
   let watcher_starter_name = process.new_name("watcher_starter")
   let watcher_name = process.new_name("watcher")
@@ -37,21 +38,32 @@ pub fn main() {
 
   logging.log(logging.Debug, "Sending watcher init to watcher starter actor")
 
-  process.sleep(500)
+  // wait for watcher starter to be ready
+  process.sleep(100)
   process.send(watcher_starter_actor, watcher.Init)
 
   let settings_actor = process.named_subject(settings_name)
 
   let watcher_actor = process.named_subject(watcher_name)
 
-  process.sleep(1000)
+  // wait for watcher to start
+  process.sleep(300)
   logging.log(logging.Debug, "Sending settings actor to watcher")
   watcher.set_settings_actor(watcher_actor, settings_actor)
 
   let init = fn(init_subject) {
     logging.log(logging.Debug, "Received init subject from http process")
-    process.send(init_subject, http.Init(settings: settings_actor))
+    process.send(
+      init_subject,
+      http.Init(settings: settings_actor, parties_manager_name:),
+    )
     logging.log(logging.Debug, "Sent init to http process")
+    // wait for parties manager to start
+    process.sleep(1000)
+    watcher.set_parties_manager_actor(
+      watcher_actor,
+      process.named_subject(parties_manager_name),
+    )
   }
 
   case process.receive(initializer_subject, 2000) {

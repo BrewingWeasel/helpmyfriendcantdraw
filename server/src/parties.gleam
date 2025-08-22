@@ -2,10 +2,12 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/otp/actor
+import gleam/result
 import gleam/string
 import logging
 import party
 import settings
+import simplifile
 import ws
 
 pub type Model {
@@ -23,6 +25,7 @@ pub type Message {
   )
   GetParty(code: String, reply_to: Subject(Result(party.PartyActor, Nil)))
   CloseParty(code: String)
+  ControlAction(party: String)
 }
 
 const alphabet = [
@@ -44,9 +47,13 @@ fn create_party_code() {
 pub type PartiesManager =
   actor.Started(Subject(Message))
 
-pub fn start(settings: settings.SettingsSubject) {
+pub fn start(
+  settings: settings.SettingsSubject,
+  name: process.Name(Message),
+) -> Result(actor.Started(Subject(Message)), actor.StartError) {
   actor.new(Model(parties: dict.new(), settings:))
   |> actor.on_message(handle_message)
+  |> actor.named(name)
   |> actor.start()
 }
 
@@ -69,6 +76,10 @@ pub fn close_party(manager: PartiesManager, code: String) -> Nil {
   actor.send(manager.data, CloseParty(code))
 }
 
+pub fn control_action(manager: process.Subject(Message), party: String) -> Nil {
+  actor.send(manager, ControlAction(party))
+}
+
 fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) {
   case message {
     NewParty(name, conn, reply_to) -> {
@@ -89,5 +100,52 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
       logging.log(logging.Notice, "Closing party with code: " <> code)
       actor.continue(Model(..model, parties: dict.delete(model.parties, code)))
     }
+    ControlAction(party_code) -> {
+      logging.log(logging.Notice, "Received control action for " <> party_code)
+      let parties = case party_code {
+        "all" -> {
+          model.parties |> dict.values()
+        }
+        code -> {
+          model.parties
+          |> dict.get(code)
+          |> result.map(list.wrap)
+          |> result.unwrap([])
+        }
+      }
+      handle_control_action(party_code, parties)
+      actor.continue(model)
+    }
   }
+}
+
+fn handle_control_action(code: String, parties) {
+  let assert Ok(current_dir) = simplifile.current_directory()
+  let file = current_dir <> "/actions/" <> code
+
+  file
+  |> simplifile.read()
+  |> result.unwrap("")
+  |> string.split("\n")
+  |> list.filter_map(fn(action) {
+    case action {
+      "broadcast " <> message -> Ok(party.Brodcast(message))
+      // ignore empty lines
+      "" -> Error(Nil)
+      _ -> {
+        logging.log(
+          logging.Warning,
+          "Unknown action was discarded: [" <> action <> "]",
+        )
+        Error(Nil)
+      }
+    }
+  })
+  |> list.each(fn(action) {
+    parties
+    |> list.each(fn(party: party.PartyActor) { actor.send(party.data, action) })
+  })
+
+  let _ = simplifile.delete(file)
+  Nil
 }

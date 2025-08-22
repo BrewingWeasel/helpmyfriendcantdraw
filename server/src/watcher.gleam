@@ -1,10 +1,12 @@
 import filespy
 import gleam/erlang/process.{type Subject}
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/otp/supervision
 import gleam/string
 import logging
+import parties
 import settings
 import simplifile
 
@@ -12,11 +14,15 @@ pub type WatcherSubject =
   Subject(filespy.Change(Message))
 
 pub type Model {
-  Model(settings: Option(settings.SettingsSubject))
+  Model(
+    settings: Option(settings.SettingsSubject),
+    party_manager: Option(process.Subject(parties.Message)),
+  )
 }
 
 pub type Message {
   SettingsActorObtained(settings: settings.SettingsSubject)
+  PartiesManagerActorObtained(settings: process.Subject(parties.Message))
 }
 
 pub type Init {
@@ -47,30 +53,54 @@ pub fn set_settings_actor(
   actor.send(watcher, filespy.Custom(SettingsActorObtained(settings_actor)))
 }
 
+pub fn set_parties_manager_actor(
+  watcher: WatcherSubject,
+  parties_manager: process.Subject(parties.Message),
+) {
+  actor.send(
+    watcher,
+    filespy.Custom(PartiesManagerActorObtained(parties_manager)),
+  )
+}
+
 fn start(watcher_name) -> Nil {
   let assert Ok(current_dir) = simplifile.current_directory()
 
   let assert Ok(_) =
     filespy.new()
     |> filespy.add_dir(current_dir <> "/config")
-    |> filespy.set_initial_state(Model(None))
+    |> filespy.add_dir(current_dir <> "/actions")
+    |> filespy.set_initial_state(Model(None, None))
     |> filespy.set_actor_handler(fn(model, message) {
       logging.log(logging.Debug, "watcher received " <> string.inspect(message))
       case message {
         filespy.Custom(SettingsActorObtained(settings)) -> {
           logging.log(logging.Debug, "Settings actor obtained")
-          actor.continue(Model(Some(settings)))
+          actor.continue(Model(..model, settings: Some(settings)))
         }
-        filespy.Change(path:, events: _) -> {
-          case string.ends_with(path, "settings") {
-            True ->
+        filespy.Custom(PartiesManagerActorObtained(parties_manager)) -> {
+          logging.log(logging.Debug, "Settings actor obtained")
+          actor.continue(Model(..model, party_manager: Some(parties_manager)))
+        }
+        filespy.Change(path:, events:) -> {
+          let path_segments = string.split(path, "/") |> list.reverse()
+          case path_segments {
+            ["settings", "config", ..] ->
               case model.settings {
                 Some(settings) -> {
                   settings.update_settings(settings)
                 }
                 None -> Nil
               }
-            False -> Nil
+            [code, "actions", ..] -> {
+              case list.contains(events, filespy.Created), model.party_manager {
+                True, Some(party_manager) -> {
+                  parties.control_action(party_manager, code)
+                }
+                _, _ -> Nil
+              }
+            }
+            _ -> Nil
           }
           actor.continue(model)
         }

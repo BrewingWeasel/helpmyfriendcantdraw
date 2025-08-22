@@ -49,6 +49,7 @@ pub type Message {
     reply_to: process.Subject(Result(Id, String)),
   )
   ClientMessage(id: Id, message: messages.ClientMessage)
+  Brodcast(message: String)
   Leave(id: Id)
 }
 
@@ -188,6 +189,13 @@ pub fn handle_message(
             True -> actor.continue(model)
           }
       }
+    }
+    Brodcast(message) -> {
+      send_to_all(
+        model.connections,
+        messages.ChatMessage(party.Server(message)),
+      )
+      actor.continue(model)
     }
     ClientMessage(id, message) -> {
       let require_permissions = fn(run) {

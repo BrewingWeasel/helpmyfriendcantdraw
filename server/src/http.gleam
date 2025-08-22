@@ -20,7 +20,10 @@ import wisp/wisp_mist
 import ws
 
 pub type Init {
-  Init(settings: settings.SettingsSubject)
+  Init(
+    settings: settings.SettingsSubject,
+    parties_manager_name: process.Name(parties.Message),
+  )
 }
 
 pub fn supervised(main_process, static_directory, index_html) {
@@ -43,7 +46,8 @@ pub fn supervised(main_process, static_directory, index_html) {
 
 fn start(static_directory, index_html, init_details: Init) {
   logging.log(Notice, "Starting http")
-  let assert Ok(parties_manager) = parties.start(init_details.settings)
+  let assert Ok(parties_manager) =
+    parties.start(init_details.settings, init_details.parties_manager_name)
   logging.log(Notice, "Parties manager started")
 
   let selector = process.new_selector()
