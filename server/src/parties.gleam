@@ -130,6 +130,20 @@ fn handle_control_action(code: String, parties) {
   |> list.filter_map(fn(action) {
     case action {
       "broadcast " <> message -> Ok(party.Brodcast(message))
+      "mimic " <> arguments -> {
+        case string.split_once(arguments, on: "|") {
+          Ok(#(name, message)) -> {
+            Ok(party.Mimic(string.trim(name), string.trim(message)))
+          }
+          Error(_) -> {
+            logging.log(
+              logging.Warning,
+              "Invalid mimic action was discarded: [" <> action <> "]",
+            )
+            Error(Nil)
+          }
+        }
+      }
       // ignore empty lines
       "" -> Error(Nil)
       _ -> {

@@ -50,6 +50,7 @@ pub type Message {
   )
   ClientMessage(id: Id, message: messages.ClientMessage)
   Brodcast(message: String)
+  Mimic(name: String, message: String)
   Leave(id: Id)
 }
 
@@ -195,6 +196,32 @@ pub fn handle_message(
         model.connections,
         messages.ChatMessage(party.Server(message)),
       )
+      actor.continue(model)
+    }
+    Mimic(name, message) -> {
+      let user =
+        model.party.players
+        |> dict.to_list()
+        |> list.find(fn(pair) {
+          let #(_user_id, player) = pair
+          player.name == name
+        })
+
+      case user {
+        Ok(#(user_id, party.Player(name:))) -> {
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.User(user_id, name, message)),
+          )
+        }
+        Error(_) -> {
+          logging.log(
+            logging.Warning,
+            "Could not find user with name " <> name <> " to mimic",
+          )
+        }
+      }
+
       actor.continue(model)
     }
     ClientMessage(id, message) -> {
