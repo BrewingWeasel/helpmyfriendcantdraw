@@ -14,7 +14,7 @@ pub type SettingsSubject =
   Subject(Message)
 
 pub type Settings {
-  Settings(max_party_size: Int)
+  Settings(max_party_size: Int, log_level: logging.LogLevel)
 }
 
 pub type Message {
@@ -34,6 +34,33 @@ fn start(settings_name) {
   |> actor.start()
 }
 
+fn get_setting(config, key, default, map_with) {
+  config
+  |> dict.get(key)
+  |> result.try(fn(value) {
+    case map_with(value) {
+      Ok(v) -> Ok(v)
+      Error(e) -> {
+        logging.log(
+          logging.Error,
+          "Invalid value for setting " <> key <> ": " <> e,
+        )
+        Error(Nil)
+      }
+    }
+  })
+  |> result.lazy_unwrap(fn() {
+    logging.log(logging.Warning, "Missing setting " <> key <> ", using default")
+    default
+  })
+  |> function.tap(fn(value) {
+    logging.log(
+      logging.Debug,
+      "Setting " <> key <> ": " <> string.inspect(value),
+    )
+  })
+}
+
 fn read_settings() {
   let config =
     "./config/settings"
@@ -49,42 +76,31 @@ fn read_settings() {
     })
     |> dict.from_list()
 
-  let get_setting = fn(key, default, map_with) {
-    config
-    |> dict.get(key)
-    |> result.try(fn(value) {
-      case map_with(value) {
-        Ok(v) -> Ok(v)
-        Error(e) -> {
-          logging.log(
-            logging.Error,
-            "Invalid value for setting " <> key <> ": " <> e,
-          )
-          Error(Nil)
-        }
-      }
-    })
-    |> result.lazy_unwrap(fn() {
-      logging.log(
-        logging.Warning,
-        "Missing setting " <> key <> ", using default",
-      )
-      default
-    })
-    |> function.tap(fn(value) {
-      logging.log(
-        logging.Debug,
-        "Setting " <> key <> ": " <> string.inspect(value),
-      )
-    })
-  }
-
   logging.log(logging.Notice, "Reading settings from config file")
 
+  let log_level =
+    get_setting(config, "log_level", logging.Info, fn(value) {
+      case string.lowercase(value) {
+        "debug" -> Ok(logging.Debug)
+        "info" -> Ok(logging.Info)
+        "notice" -> Ok(logging.Notice)
+        "warning" -> Ok(logging.Warning)
+        "error" -> Ok(logging.Error)
+        "critical" -> Ok(logging.Critical)
+        _ ->
+          Error(
+            "Expected one of: debug, info, notice, warning, error, critical",
+          )
+      }
+    })
+
+  logging.set_level(log_level)
+
   Settings(
-    max_party_size: get_setting("max_party_size", 8, fn(value) {
+    max_party_size: get_setting(config, "max_party_size", 8, fn(value) {
       int.parse(value) |> result.replace_error("Expected an integer")
     }),
+    log_level:,
   )
 }
 
