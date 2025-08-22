@@ -13,23 +13,23 @@ import logging.{Debug, Notice, Warning}
 import mist.{type Connection, type ResponseData}
 import parties
 import party
+import settings
 import shared/messages
 import wisp
 import wisp/wisp_mist
 import ws
 
 pub type Init {
-  Init
+  Init(settings: settings.SettingsSubject)
 }
 
 pub fn supervised(main_process, static_directory, index_html) {
   supervision.supervisor(fn() {
     let assert Ok(init_subject) as actor =
       actor.new(Nil)
-      |> actor.on_message(fn(_state, msg) {
-        let Init = msg
+      |> actor.on_message(fn(_state, init_details) {
         logging.log(Debug, "Init received")
-        start(static_directory, index_html)
+        start(static_directory, index_html, init_details)
 
         actor.continue(Nil)
       })
@@ -41,9 +41,9 @@ pub fn supervised(main_process, static_directory, index_html) {
   })
 }
 
-fn start(static_directory, index_html) {
+fn start(static_directory, index_html, init_details: Init) {
   logging.log(Notice, "Starting http")
-  let assert Ok(parties_manager) = parties.start()
+  let assert Ok(parties_manager) = parties.start(init_details.settings)
   logging.log(Notice, "Parties manager started")
 
   let selector = process.new_selector()

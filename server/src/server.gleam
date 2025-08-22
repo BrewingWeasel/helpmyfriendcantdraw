@@ -2,7 +2,9 @@ import gleam/erlang/process
 import gleam/otp/static_supervisor as supervisor
 import http
 import logging.{Notice}
+import settings
 import simplifile
+import watcher
 import wisp
 
 pub fn main() {
@@ -14,23 +16,46 @@ pub fn main() {
 
   let assert Ok(index_html) = simplifile.read(static_directory <> "/index.html")
 
-  let main_process_subject = process.new_subject()
+  let initializer_subject = process.new_subject()
+
+  let settings_name = process.new_name("settings")
+
+  let watcher_starter_name = process.new_name("watcher_starter")
+  let watcher_name = process.new_name("watcher")
+
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
+    |> supervisor.add(settings.supervised(settings_name))
+    |> supervisor.add(watcher.supervised(watcher_starter_name, watcher_name))
     |> supervisor.add(http.supervised(
-      main_process_subject,
+      initializer_subject,
       static_directory,
       index_html,
     ))
     |> supervisor.start()
 
+  let watcher_starter_actor = process.named_subject(watcher_starter_name)
+
+  logging.log(logging.Debug, "Sending watcher init to watcher starter actor")
+
+  process.sleep(500)
+  process.send(watcher_starter_actor, watcher.Init)
+
+  let settings_actor = process.named_subject(settings_name)
+
+  let watcher_actor = process.named_subject(watcher_name)
+
+  process.sleep(1000)
+  logging.log(logging.Debug, "Sending settings actor to watcher")
+  watcher.set_settings_actor(watcher_actor, settings_actor)
+
   let init = fn(init_subject) {
     logging.log(logging.Debug, "Received init subject from http process")
-    process.send(init_subject, http.Init)
+    process.send(init_subject, http.Init(settings: settings_actor))
     logging.log(logging.Debug, "Sent init to http process")
   }
 
-  case process.receive(main_process_subject, 2000) {
+  case process.receive(initializer_subject, 2000) {
     Ok(init_subject) -> init(init_subject)
     Error(_) ->
       logging.log(
@@ -41,7 +66,7 @@ pub fn main() {
 
   logging.log(Notice, "Started server supervisor")
 
-  loop_handle_start(main_process_subject, init)
+  loop_handle_start(initializer_subject, init)
 }
 
 fn loop_handle_start(main_process_subject, init) {

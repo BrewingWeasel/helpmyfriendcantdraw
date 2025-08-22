@@ -2,14 +2,17 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/otp/actor
-import gleam/otp/supervision
 import gleam/string
 import logging
 import party
+import settings
 import ws
 
 pub type Model {
-  Model(parties: Dict(String, party.PartyActor))
+  Model(
+    parties: Dict(String, party.PartyActor),
+    settings: settings.SettingsSubject,
+  )
 }
 
 pub type Message {
@@ -41,12 +44,8 @@ fn create_party_code() {
 pub type PartiesManager =
   actor.Started(Subject(Message))
 
-pub fn supervised() {
-  supervision.worker(fn() { start() })
-}
-
-pub fn start() {
-  actor.new(Model(parties: dict.new()))
+pub fn start(settings: settings.SettingsSubject) {
+  actor.new(Model(parties: dict.new(), settings:))
   |> actor.on_message(handle_message)
   |> actor.start()
 }
@@ -74,12 +73,12 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
   case message {
     NewParty(name, conn, reply_to) -> {
       let party_code = create_party_code()
-      let party = party.create(name, conn)
+      let party = party.create(name, conn, model.settings)
       actor.send(reply_to, #(party_code, party))
 
-      actor.continue(Model(
-        parties: model.parties |> dict.insert(party_code, party),
-      ))
+      actor.continue(
+        Model(..model, parties: model.parties |> dict.insert(party_code, party)),
+      )
     }
     GetParty(code, reply_to) -> {
       actor.send(reply_to, dict.get(model.parties, code))
@@ -88,7 +87,7 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
     }
     CloseParty(code) -> {
       logging.log(logging.Notice, "Closing party with code: " <> code)
-      actor.continue(Model(parties: dict.delete(model.parties, code)))
+      actor.continue(Model(..model, parties: dict.delete(model.parties, code)))
     }
   }
 }

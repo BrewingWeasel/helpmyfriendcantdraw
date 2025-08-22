@@ -23,6 +23,7 @@ gleam_http = ">= 4.1.1 and < 5.0.0"
 logging = ">= 1.3.0 and < 2.0.0"
 wisp = ">= 1.8.0 and < 2.0.0"
 simplifile = ">= 2.3.0 and < 3.0.0"
+filespy = { git = "https://github.com/BrewingWeasel/gleam-filespy.git", ref = "hacky-fixes" }
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

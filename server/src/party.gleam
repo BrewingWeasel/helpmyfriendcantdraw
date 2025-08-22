@@ -7,6 +7,7 @@ import gleam/otp/actor
 import gleam/result
 import gleam/string
 import logging
+import settings
 import shared/history.{type Direction, Down, Left, Right, Up}
 import shared/messages
 import shared/party
@@ -28,6 +29,7 @@ pub type Model {
     removed_players: List(Id),
     muted_status: MutedStatus,
     locked: Bool,
+    settings: settings.SettingsSubject,
   )
 }
 
@@ -53,7 +55,11 @@ pub type Message {
 pub type PartyActor =
   actor.Started(process.Subject(Message))
 
-pub fn create(player: String, conn: ws.Connection) -> PartyActor {
+pub fn create(
+  player: String,
+  conn: ws.Connection,
+  settings: settings.SettingsSubject,
+) -> PartyActor {
   let assert Ok(actor) =
     actor.new(Model(
       party_member_index: 0,
@@ -67,6 +73,7 @@ pub fn create(player: String, conn: ws.Connection) -> PartyActor {
       removed_players: [],
       muted_status: Individuals([]),
       locked: False,
+      settings:,
     ))
     |> actor.on_message(handle_message)
     |> actor.start()
@@ -128,7 +135,8 @@ pub fn handle_message(
       })
 
       use <- bool.lazy_guard(
-        when: dict.size(model.connections) >= 8,
+        when: dict.size(model.connections)
+          >= settings.get_settings(model.settings).max_party_size,
         return: fn() {
           actor.send(reply_to, Error("Party is already full"))
           actor.continue(model)
