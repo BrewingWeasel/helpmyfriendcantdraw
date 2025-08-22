@@ -58,33 +58,23 @@ pub type Msg {
   ChatMessage(chat.Msg)
   SetLayout(party.DrawingsLayout)
   Start
+  CopyCode
 }
+
+@external(javascript, "./party.ffi.mjs", "write_to_clipboard")
+fn write_to_clipboard(code: String) -> Nil
 
 pub fn update(model: Model, msg: Msg) {
   case msg {
-    // WsWrapper(event) -> {
-    //   case event {
-    //     ws.InvalidUrl -> panic as "invalid websocket url"
-    //     ws.OnOpen(socket) -> {
-    //     }
-    //     ws.OnTextMessage(_message) ->
-    //       panic as "should be intercepted by main handler"
-    //     ws.OnBinaryMessage(_message) -> {
-    //       panic as "should read all messages as utf8"
-    //     }
-    //     ws.OnClose(_reason) -> {
-    //       let code = case model.party {
-    //         KnownParty(code:, ..) -> code
-    //         PartyCode(code:, ..) -> code
-    //         Creating -> "????"
-    //       }
-    //       #(
-    //         Model(..model, party: PartyCode(code, "Disconnected..."), ws: None),
-    //         effect.none(),
-    //       )
-    //     }
-    //   }
-    // }
+    CopyCode -> {
+      case model.party {
+        KnownParty(SharedParty(code:, ..)) | PartyCode(code:, ..) -> {
+          write_to_clipboard(code)
+          #(model, effect.none())
+        }
+        Creating -> #(model, effect.none())
+      }
+    }
     RemovePlayer(id) -> {
       case model.ws {
         Some(ws) -> {
@@ -275,7 +265,15 @@ pub fn view(model: Model) -> Element(Msg) {
       ],
       [
         html.h3([], [element.text("PARTY CODE")]),
-        html.h3([attribute.class("text-5xl")], [element.text(code)]),
+        html.h3(
+          [
+            attribute.class(
+              "text-5xl cursor-pointer hover:scale-110 duration-200 ease-in-out",
+            ),
+            event.on_click(CopyCode),
+          ],
+          [element.text(code)],
+        ),
         html.h3([], [element.text("(click to copy)")]),
       ],
     ),
