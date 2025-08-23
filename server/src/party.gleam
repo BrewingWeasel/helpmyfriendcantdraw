@@ -23,7 +23,7 @@ pub type Model {
     connections: Dict(Id, ws.Connection),
     directions: Dict(Id, NeighborDetails),
     full_drawing: List(history.HistoryItem),
-    needed_ids: List(Id),
+    drawing_status: Dict(Id, DrawingStatus),
     full_drawing_x_size: Int,
     full_drawing_y_size: Int,
     removed_players: List(Id),
@@ -31,6 +31,12 @@ pub type Model {
     locked: Bool,
     settings: settings.SettingsSubject,
   )
+}
+
+pub type DrawingStatus {
+  Drawing
+  Ready
+  Sent
 }
 
 pub type MutedStatus {
@@ -69,7 +75,7 @@ pub fn create(
       connections: dict.from_list([#(0, conn)]),
       directions: dict.new(),
       full_drawing: [],
-      needed_ids: [0],
+      drawing_status: dict.new(),
       full_drawing_x_size: 0,
       full_drawing_y_size: 0,
       removed_players: [],
@@ -168,7 +174,6 @@ pub fn handle_message(
           ..model,
           party_member_index: id,
           party: new_party,
-          needed_ids: [id, ..model.needed_ids],
           connections: model.connections |> dict.insert(id, conn),
         )
 
@@ -398,6 +403,9 @@ pub fn handle_message(
             Model(
               ..model,
               directions:,
+              drawing_status: players
+                |> list.map(fn(id) { #(id, Drawing) })
+                |> dict.from_list(),
               full_drawing_x_size:,
               full_drawing_y_size:,
             ),
@@ -439,6 +447,57 @@ pub fn handle_message(
         }
         messages.CreateParty(..) | messages.JoinParty(..) ->
           panic as "should not be handled here"
+        messages.ToggleReady -> {
+          let #(new_status, ready_message) = case
+            dict.get(model.drawing_status, id)
+          {
+            Ok(Drawing) -> #(Ready, "ready")
+            _ -> #(Drawing, "no longer ready")
+          }
+
+          let drawing_status =
+            model.drawing_status
+            |> dict.insert(id, new_status)
+
+          let ready_values =
+            dict.values(drawing_status)
+            |> list.count(fn(status) { status != Drawing })
+
+          let total_values = dict.size(drawing_status)
+
+          let name =
+            model.party.players
+            |> dict.get(id)
+            |> result.map(fn(player) { player.name })
+            |> result.unwrap("unknown")
+
+          send_to_all(
+            model.connections,
+            messages.ChatMessage(party.Server(
+              name
+              <> " is "
+              <> ready_message
+              <> " ("
+              <> int.to_string(ready_values)
+              <> "/"
+              <> int.to_string(total_values)
+              <> ")",
+            )),
+          )
+
+          case ready_values == total_values {
+            True -> {
+              model.connections
+              |> dict.values()
+              |> list.each(fn(connection) {
+                process.send(connection, messages.RequestDrawing)
+              })
+            }
+            False -> Nil
+          }
+
+          actor.continue(Model(..model, drawing_status:))
+        }
       }
     }
   }
@@ -592,9 +651,9 @@ fn try_to_run_command(
 fn add_drawing_to_history(model: Model, id, history) {
   case dict.get(model.directions, id) {
     Ok(NeighborDetails(x_offset:, y_offset:, ..)) -> {
-      let needed_ids =
-        model.needed_ids
-        |> list.filter(fn(needed_id) { needed_id != id })
+      let drawing_status =
+        model.drawing_status
+        |> dict.insert(id, Sent)
 
       let full_drawing =
         list.append(
@@ -611,8 +670,12 @@ fn add_drawing_to_history(model: Model, id, history) {
           model.full_drawing,
         )
 
-      case needed_ids {
-        [] -> {
+      let all_sent =
+        dict.values(drawing_status)
+        |> list.all(fn(status) { status == Sent })
+
+      case all_sent {
+        True -> {
           model.connections
           |> dict.values()
           |> list.each(fn(connection) {
@@ -626,10 +689,10 @@ fn add_drawing_to_history(model: Model, id, history) {
             )
           })
         }
-        _ -> Nil
+        False -> Nil
       }
 
-      Model(..model, full_drawing:, needed_ids:)
+      Model(..model, full_drawing:, drawing_status:)
     }
     Error(_) -> model
   }
@@ -670,8 +733,8 @@ fn remove_users(
       ..model,
       party:,
       connections:,
-      needed_ids: model.needed_ids
-        |> list.filter(fn(needed_id) { !list.contains(ids, needed_id) }),
+      drawing_status: model.drawing_status
+        |> dict.drop(ids),
       removed_players: list.append(ids, model.removed_players),
     ),
   )

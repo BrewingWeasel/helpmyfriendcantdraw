@@ -71,6 +71,7 @@ pub type Model {
     ws: option.Option(ws.WebSocket),
     canvas_details: CanvasDetails,
     party: party.SharedParty,
+    is_ready: Bool,
   )
 }
 
@@ -112,6 +113,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         edge: 30,
       ),
       party: init.party,
+      is_ready: False,
     )
   #(model, effect.after_paint(fn(dispatch, _) { dispatch(Reset) }))
 }
@@ -130,6 +132,7 @@ pub type Msg {
   Reset
   ChatMessage(chat.Msg)
   EndDrawing
+  ToggleReady
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -553,6 +556,18 @@ pub fn update(model: Model, msg: Msg) {
         ),
       )
     }
+    ToggleReady -> {
+      let assert Some(ws) = model.ws
+
+      #(
+        Model(..model, is_ready: !model.is_ready),
+        ws.send(
+          ws,
+          messages.ToggleReady
+            |> messages.encode_client_message(),
+        ),
+      )
+    }
   }
 }
 
@@ -728,14 +743,19 @@ pub fn view(model: Model) -> Element(Msg) {
       None, None -> [center]
     })
 
-  let end_button = case model.party.id == 0 {
+  let #(ready_button_class, ready_button_text) = case model.is_ready {
+    True -> #("bg-gray-200", "unready")
+    False -> #("bg-green-200", "ready")
+  }
+
+  let end_button = case model.party.id == 0 && model.is_ready {
     True ->
       html.button(
         [
           attribute.class("p-1 mt-1 text-2xl bg-rose-200 rounded-lg"),
           event.on_click(EndDrawing),
         ],
-        [element.text("Force End")],
+        [element.text("end early")],
       )
     False -> element.none()
   }
@@ -763,7 +783,18 @@ ctx =
         html.div([], [
           view_drawing_ui(model.pen_settings),
           canvas,
-          html.div([], [end_button]),
+          html.div([], [
+            html.button(
+              [
+                event.on_click(ToggleReady),
+                attribute.class(
+                  "p-1 mt-1 mr-2 text-2xl rounded-lg " <> ready_button_class,
+                ),
+              ],
+              [element.text(ready_button_text)],
+            ),
+            end_button,
+          ]),
         ]),
       ]),
     ],

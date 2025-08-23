@@ -34,6 +34,7 @@ pub type ClientMessage {
   Redo(direction: history.Direction)
   EndDrawing(history: List(history.HistoryItem))
   SendFinalDrawing(history: List(history.HistoryItem))
+  ToggleReady
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -78,6 +79,7 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
       ]
       #(10, attached_data)
     }
+    ToggleReady -> #(11, [])
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -142,6 +144,7 @@ pub fn decode_client_message(
         )
         decode.success(SendFinalDrawing(history:))
       }
+      11 -> decode.success(ToggleReady)
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
