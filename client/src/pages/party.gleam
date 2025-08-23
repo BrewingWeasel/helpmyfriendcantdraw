@@ -233,12 +233,17 @@ pub fn view(model: Model) -> Element(Msg) {
           ]),
         ])
 
-      html.div([attribute.class("flex gap-8 w-screen mx-12")], [
+      html.div([attribute.class("flex gap-8 w-screen mx-12 max-h-[85vh]")], [
         chat |> element.map(ChatMessage),
         html.div(
           [attribute.class("bg-slate-100 rounded-xl p-5 w-64 flex-none")],
           [
-            html.h2([attribute.class("text-3xl")], [html.text("Players")]),
+            html.h2([attribute.class("text-3xl hidden sm:block")], [
+              html.text("Players"),
+            ]),
+            html.h2([attribute.class("text-3xl sm:hidden text-center")], [
+              html.text("Party (" <> code <> ")"),
+            ]),
             html.ul([attribute.class("text-xl")], players),
           ],
         ),
@@ -258,9 +263,8 @@ pub fn view(model: Model) -> Element(Msg) {
   element.fragment([
     html.div(
       [
-        attribute.style("font-family", "Caveat Brush"),
         attribute.class(
-          "absolute top-0 right-0 my-6 mx-12 text-center text-xl gap-0",
+          "absolute top-0 right-0 my-6 mx-12 text-center text-xl gap-0 hidden sm:block",
         ),
       ],
       [

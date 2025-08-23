@@ -64,17 +64,21 @@ pub fn view(model: Model) -> Element(Msg) {
       attribute.class(
         "w-screen h-screen flex flex-col items-center justify-center text-4xl",
       ),
-      attribute.style("font-family", "Caveat Brush"),
     ],
     [
       html.input([
         attribute.value(model.name),
         event.on_input(ChangeName),
-        attribute.class("text-center"),
+        attribute.maxlength(16),
+        attribute.class("text-center text-gray-500 block mb-12 sm:mb-0"),
         attribute.placeholder("Enter your name"),
       ]),
       html.div(
-        [attribute.class("w-screen flex justify-center gap-8 text-4xl h-20")],
+        [
+          attribute.class(
+            "w-screen flex justify-center items-center sm:gap-8 text-4xl h-20 flex-col sm:flex-row",
+          ),
+        ],
         [
           html.div([], [
             html.button(
