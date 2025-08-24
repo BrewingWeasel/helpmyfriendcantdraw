@@ -408,6 +408,7 @@ pub fn handle_message(
                 |> dict.from_list(),
               full_drawing_x_size:,
               full_drawing_y_size:,
+              full_drawing: [],
             ),
           )
         }
