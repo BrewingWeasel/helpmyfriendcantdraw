@@ -1,4 +1,5 @@
 import filespy
+import gleam/erlang/application
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -8,7 +9,6 @@ import gleam/string
 import logging
 import parties
 import settings
-import simplifile
 
 pub type WatcherSubject =
   Subject(filespy.Change(Message))
@@ -64,12 +64,12 @@ pub fn set_parties_manager_actor(
 }
 
 fn start(watcher_name) -> Nil {
-  let assert Ok(current_dir) = simplifile.current_directory()
+  let assert Ok(priv_dir) = application.priv_directory("server")
 
   let assert Ok(_) =
     filespy.new()
-    |> filespy.add_dir(current_dir <> "/config")
-    |> filespy.add_dir(current_dir <> "/actions")
+    |> filespy.add_dir(priv_dir <> "/config")
+    |> filespy.add_dir(priv_dir <> "/actions")
     |> filespy.set_initial_state(Model(None, None))
     |> filespy.set_actor_handler(fn(model, message) {
       logging.log(logging.Debug, "watcher received " <> string.inspect(message))

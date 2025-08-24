@@ -1,4 +1,5 @@
 import gleam/dict.{type Dict}
+import gleam/erlang/application
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/otp/actor
@@ -120,8 +121,8 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
 }
 
 fn handle_control_action(code: String, parties) {
-  let assert Ok(current_dir) = simplifile.current_directory()
-  let file = current_dir <> "/actions/" <> code
+  let assert Ok(priv_dir) = application.priv_directory("server")
+  let file = priv_dir <> "/actions/" <> code
 
   file
   |> simplifile.read()

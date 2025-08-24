@@ -1,2 +1,2 @@
 max_party_size=8
-log_level=info
+log_level=debug

@@ -31,6 +31,7 @@ packages = [
 ]
 
 [requirements]
+envoy = { version = ">= 1.0.2 and < 2.0.0" }
 filespy = { git = "https://github.com/BrewingWeasel/gleam-filespy.git", ref = "hacky-fixes" }
 gleam_erlang = { version = ">= 1.2.0 and < 2.0.0" }
 gleam_http = { version = ">= 4.1.1 and < 5.0.0" }

@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/erlang/application
 import gleam/erlang/process.{type Subject}
 import gleam/function
 import gleam/int
@@ -62,8 +63,12 @@ fn get_setting(config, key, default, map_with) {
 }
 
 fn read_settings() {
+  let assert Ok(priv_dir) = application.priv_directory("server")
+
+  let config_file = priv_dir <> "/config/settings"
+
   let config =
-    "./config/settings"
+    config_file
     |> simplifile.read()
     |> result.lazy_unwrap(fn() {
       logging.log(logging.Error, "Failed to read settings file, using defaults")

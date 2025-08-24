@@ -1,3 +1,4 @@
+import envoy
 import gleam/erlang/process
 import gleam/http
 import gleam/http/request.{type Request}
@@ -107,12 +108,32 @@ fn start(static_directory, index_html, init_details: Init) {
       }
     }
     |> mist.new
-    |> mist.port(3000)
+    |> mist.bind(get_host())
+    |> mist.port(get_port())
     |> mist.start()
 
   logging.log(Notice, "Server started")
 
   process.sleep_forever()
+}
+
+fn get_host() -> String {
+  case envoy.get("HOST") {
+    Ok(host) -> host
+    Error(_) -> "0.0.0.0"
+  }
+}
+
+fn get_port() -> Int {
+  case envoy.get("PORT") {
+    Ok(port) -> {
+      case int.parse(port) {
+        Ok(port_number) -> port_number
+        Error(_) -> 8080
+      }
+    }
+    Error(_) -> 3000
+  }
 }
 
 type WebsocketState {

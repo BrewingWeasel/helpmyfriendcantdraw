@@ -1,0 +1,38 @@
+# flyctl launch added from client/.gitignore
+client/**/*.beam
+client/**/*.ez
+client/build
+client/**/erl_crash.dump
+client/**/priv
+
+# flyctl launch added from server/.gitignore
+server/**/*.beam
+server/**/*.ez
+server/build
+server/**/erl_crash.dump
+server/**/priv/static
+
+# flyctl launch added from server/build/packages/filespy/.gitignore
+server/build/packages/filespy/**/*.beam
+server/build/packages/filespy/**/*.ez
+server/build/packages/filespy/**/build
+server/build/packages/filespy/**/erl_crash.dump
+
+# Devenv
+server/build/packages/filespy/**/.devenv*
+server/build/packages/filespy/**/devenv.local.nix
+
+# direnv
+server/build/packages/filespy/**/.direnv
+
+# pre-commit
+server/build/packages/filespy/**/.pre-commit-config.yaml
+
+server/build/packages/filespy/**/.devenv
+
+# flyctl launch added from shared/.gitignore
+shared/**/*.beam
+shared/**/*.ez
+shared/build
+shared/**/erl_crash.dump
+fly.toml

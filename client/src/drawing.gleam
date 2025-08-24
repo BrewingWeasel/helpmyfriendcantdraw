@@ -43,10 +43,7 @@ type Page {
 }
 
 fn init(_: a) -> #(Model, effect.Effect(Msg)) {
-  #(
-    Model(ws: None, page: HomePage(home.init().0)),
-    ws.init("http://127.0.0.1:3000/ws", WsWrapper),
-  )
+  #(Model(ws: None, page: HomePage(home.init().0)), ws.init("/ws", WsWrapper))
 }
 
 // UPDATE ----------------------------------------------------------------------
