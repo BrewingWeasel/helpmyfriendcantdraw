@@ -312,7 +312,7 @@ pub fn handle_message(
           }
         }
         messages.StartDrawing -> {
-          let players = dict.keys(model.party.players)
+          let players = dict.keys(model.party.players) |> list.shuffle()
 
           use <- bool.lazy_guard(when: list.length(players) < 2, return: fn() {
             actor.continue(model)
