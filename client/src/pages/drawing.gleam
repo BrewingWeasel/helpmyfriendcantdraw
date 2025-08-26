@@ -401,6 +401,8 @@ pub fn update(model: Model, msg: Msg) {
     Reset -> {
       clear()
       model.history |> list.reverse() |> follow_history()
+      set_color(model.pen_settings.color)
+      set_size(model.pen_settings.size)
       draw_tooltips(model.canvas_details)
       #(model, effect.none())
     }
