@@ -884,7 +884,7 @@ fn view_drawing_ui(pen_settings: PenSettings) -> Element(Msg) {
     })
 
   let size_buttons =
-    [12, 36, 64, 128]
+    [6, 12, 36, 128]
     |> list.index_map(fn(size, i) {
       let outline = case size == pen_settings.size {
         True -> "bg-slate-600"
