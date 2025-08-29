@@ -5,7 +5,7 @@ export function draw_at_other_canvas(canvas_name, pen_settings, strokes) {
   ctx.beginPath();
 
   ctx.strokeStyle = pen_settings.color;
-  ctx.lineWidth = pen_settings.size;;
+  ctx.lineWidth = pen_settings.size;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -25,11 +25,6 @@ export function draw_at_other_canvas(canvas_name, pen_settings, strokes) {
 
 
 export function draw_point(x, y) {
-  // ctx.lineWidth =
-  //   brushSize.value;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
   ctx.lineTo(
     x,
     y
@@ -69,20 +64,23 @@ export function get_buffer(x) {
   return x.buffer;
 }
 
-export function draw_tooltips(canvas_details) {
-  const canvas = document.getElementById('tooltip-canvas');
-  const ctx = canvas.getContext('2d');
+export function setup_canvas(canvas_details) {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-  ctx.setLineDash([3, 8]);
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(10, 10, 10, 1)';
+  const tooltip_canvas = document.getElementById('tooltip-canvas');
+  const tooltip_ctx = tooltip_canvas.getContext('2d');
+
+  tooltip_ctx.setLineDash([3, 8]);
+  tooltip_ctx.lineWidth = 1;
+  tooltip_ctx.strokeStyle = 'rgba(10, 10, 10, 1)';
 
   const drawTooltip = ([x, y], [x2, y2]) => {
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.closePath();
+    tooltip_ctx.beginPath();
+    tooltip_ctx.moveTo(x, y);
+    tooltip_ctx.lineTo(x2, y2);
+    tooltip_ctx.stroke();
+    tooltip_ctx.closePath();
   };
 
   if (canvas_details.top) {

@@ -394,7 +394,7 @@ pub fn update(model: Model, msg: Msg) {
         model.pen_settings.size,
         model.pen_settings.color,
       )
-      draw_tooltips(model.canvas_details)
+      setup_canvas(model.canvas_details)
       #(model, effect.none())
     }
     BackHistory -> {
@@ -636,8 +636,8 @@ fn follow_history(history: List(HistoryItem)) -> Nil {
   }
 }
 
-@external(javascript, "./drawing.ffi.mjs", "draw_tooltips")
-pub fn draw_tooltips(canvas_details: CanvasDetails) -> Nil
+@external(javascript, "./drawing.ffi.mjs", "setup_canvas")
+pub fn setup_canvas(canvas_details: CanvasDetails) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "draw_point")
 fn draw_point(x: Int, y: Int) -> Nil
