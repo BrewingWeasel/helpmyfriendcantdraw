@@ -100,6 +100,42 @@ export function draw_tooltips(canvas_details) {
   if (canvas_details.right) {
     drawTooltip([canvas_details.width - canvas_details.edge, 0], [canvas_details.width - canvas_details.edge, canvas_details.height])
   }
-
 }
 
+export function setup_cursor() {
+	return {
+		canvas: document.createElement("canvas"),
+		url: undefined,
+	};
+}
+
+export function set_cursor(cursor_details, size, color, scale = window.devicePixelRatio) {
+    const render_size = size * scale;
+    cursor_details.canvas.width = render_size;
+    cursor_details.canvas.height = render_size;
+
+    const cursor_ctx = cursor_details.canvas.getContext("2d");
+
+    cursor_ctx.scale(scale, scale);
+    cursor_ctx.strokeStyle = color;
+	cursor_ctx.lineWidth = 1.5;
+	const padding = cursor_ctx.lineWidth / 2;
+
+    cursor_ctx.beginPath();
+    cursor_ctx.arc(size / 2, size / 2, size / 2 - padding, 0, Math.PI * 2);
+    cursor_ctx.stroke();
+
+    const final_canvas = document.createElement("canvas");
+    final_canvas.width = size;
+    final_canvas.height = size;
+
+    const final_ctx = final_canvas.getContext("2d");
+    final_ctx.drawImage(cursor_details.canvas, 0, 0, size, size);
+
+    final_canvas.toBlob((blob) => {
+        if (cursor_details.url) URL.revokeObjectURL(cursor_details.url);
+        cursor_details.url = URL.createObjectURL(blob);
+
+        canvas.style.cursor = `url(${cursor_details.url}) ${size / 2} ${size / 2}, auto`;
+    });
+}

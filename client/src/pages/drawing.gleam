@@ -72,6 +72,7 @@ pub type Model {
     canvas_details: CanvasDetails,
     party: party.SharedParty,
     is_ready: Bool,
+    cursor_details: CursorDetails,
   )
 }
 
@@ -114,6 +115,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
       ),
       party: init.party,
       is_ready: False,
+      cursor_details: setup_cursor_details(),
     )
   #(model, effect.after_paint(fn(dispatch, _) { dispatch(Reset) }))
 }
@@ -387,6 +389,11 @@ pub fn update(model: Model, msg: Msg) {
       model.history |> list.reverse() |> follow_history()
       set_color(model.pen_settings.color)
       set_size(model.pen_settings.size)
+      set_cursor(
+        model.cursor_details,
+        model.pen_settings.size,
+        model.pen_settings.color,
+      )
       draw_tooltips(model.canvas_details)
       #(model, effect.none())
     }
@@ -498,6 +505,7 @@ pub fn update(model: Model, msg: Msg) {
     }
     SetColor(color) -> {
       set_color(color)
+      set_cursor(model.cursor_details, model.pen_settings.size, color)
       #(
         Model(
           ..model,
@@ -509,6 +517,7 @@ pub fn update(model: Model, msg: Msg) {
     }
     SetSize(size) -> {
       set_size(size)
+      set_cursor(model.cursor_details, size, model.pen_settings.color)
       #(
         Model(
           ..model,
@@ -647,6 +656,14 @@ fn set_color(color: String) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "set_size")
 fn set_size(size: Int) -> Nil
+
+pub type CursorDetails
+
+@external(javascript, "./drawing.ffi.mjs", "setup_cursor")
+fn setup_cursor_details() -> CursorDetails
+
+@external(javascript, "./drawing.ffi.mjs", "set_cursor")
+fn set_cursor(cursor_details: CursorDetails, size: Int, color: String) -> Nil
 
 // VIEW ------------------------------------------------------------------------
 
