@@ -133,6 +133,7 @@ pub type Msg {
   ChatMessage(chat.Msg)
   EndDrawing
   ToggleReady
+  MouseEnter(mouse_down: Bool, x: Int, y: Int)
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -369,33 +370,16 @@ pub fn update(model: Model, msg: Msg) {
       #(Model(..model, history: [Point(x, y), ..model.history]), effect.none())
     }
     StartDrawing(x:, y:) -> {
-      draw_point(x, y)
-      let new_history = case model.history_pos {
-        0 -> model.history
-        _ -> take_history(model.history, model.history_pos + 1)
-      }
-      #(
-        Model(
-          ..model,
-          is_drawing: True,
-          history: [
-            Point(x, y),
-            Size(model.pen_settings.size),
-            Color(model.pen_settings.color),
-            ..new_history
-          ],
-          history_pos: 0,
-        ),
-        effect.none(),
-      )
+      start_drawing(model, x:, y:)
     }
-    StopDrawing -> {
+    StopDrawing | MouseLeave -> {
       stop_drawing(model)
     }
-    MouseLeave -> {
-      case model.is_drawing {
-        True -> stop_drawing(model)
-        False -> #(model, effect.none())
+    MouseEnter(mouse_down:, x:, y:) -> {
+      case model.is_drawing, mouse_down {
+        True, False -> stop_drawing(model)
+        False, True -> start_drawing(model, x:, y:)
+        _, _ -> #(model, effect.none())
       }
     }
     Reset -> {
@@ -573,6 +557,32 @@ pub fn update(model: Model, msg: Msg) {
   }
 }
 
+fn start_drawing(
+  model: Model,
+  x x: Int,
+  y y: Int,
+) -> #(Model, effect.Effect(Msg)) {
+  draw_point(x, y)
+  let new_history = case model.history_pos {
+    0 -> model.history
+    _ -> take_history(model.history, model.history_pos + 1)
+  }
+  #(
+    Model(
+      ..model,
+      is_drawing: True,
+      history: [
+        Point(x, y),
+        Size(model.pen_settings.size),
+        Color(model.pen_settings.color),
+        ..new_history
+      ],
+      history_pos: 0,
+    ),
+    effect.none(),
+  )
+}
+
 pub fn take_history(history: List(HistoryItem), pos: Int) -> List(HistoryItem) {
   case history {
     [] -> []
@@ -657,6 +667,15 @@ pub fn view(model: Model) -> Element(Msg) {
       decode.success(StartDrawing(x, y))
     })
 
+  let on_mouseenter =
+    event.on("mouseenter", {
+      use x <- decode.field("offsetX", decode.int)
+      use y <- decode.field("offsetY", decode.int)
+      use buttons <- decode.field("buttons", decode.int)
+
+      decode.success(MouseEnter(mouse_down: buttons == 1, x:, y:))
+    })
+
   // border-t-2 border-l-2 border-b-2 border-r-2
   let middle_class = "border-gray-300"
 
@@ -711,6 +730,7 @@ pub fn view(model: Model) -> Element(Msg) {
         on_mousedown,
         event.on_mouse_up(StopDrawing),
         on_mousemove,
+        on_mouseenter,
         event.on_mouse_leave(MouseLeave),
       ]),
       html.canvas([
@@ -964,13 +984,19 @@ fn stop_drawing(model: Model) {
           let bottom_border =
             model.canvas_details.height - model.canvas_details.edge
           let bottom = case y {
-            y if y > bottom_border - pen_edge -> [Point(x, y - bottom_border), ..bottom]
+            y if y > bottom_border - pen_edge -> [
+              Point(x, y - bottom_border),
+              ..bottom
+            ]
             _ -> bottom
           }
           let right_border =
             model.canvas_details.width - model.canvas_details.edge
           let right = case x {
-            x if x > right_border - pen_edge -> [Point(x - right_border, y), ..right]
+            x if x > right_border - pen_edge -> [
+              Point(x - right_border, y),
+              ..right
+            ]
             _ -> right
           }
           #(top, left, bottom, right)
