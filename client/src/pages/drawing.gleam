@@ -951,25 +951,26 @@ fn stop_drawing(model: Model) {
     |> list.fold(#([], [], [], []), fn(acc, item) {
       case item {
         Point(x, y) -> {
+          let pen_edge = model.pen_settings.size / 2
           let #(top, left, bottom, right) = acc
           let top = case y {
-            y if y < model.canvas_details.edge -> [item, ..top]
+            y if y < model.canvas_details.edge + pen_edge -> [item, ..top]
             _ -> top
           }
           let left = case x {
-            x if x < model.canvas_details.edge -> [item, ..left]
+            x if x < model.canvas_details.edge + pen_edge -> [item, ..left]
             _ -> left
           }
           let bottom_border =
             model.canvas_details.height - model.canvas_details.edge
           let bottom = case y {
-            y if y > bottom_border -> [Point(x, y - bottom_border), ..bottom]
+            y if y > bottom_border - pen_edge -> [Point(x, y - bottom_border), ..bottom]
             _ -> bottom
           }
           let right_border =
             model.canvas_details.width - model.canvas_details.edge
           let right = case x {
-            x if x > right_border -> [Point(x - right_border, y), ..right]
+            x if x > right_border - pen_edge -> [Point(x - right_border, y), ..right]
             _ -> right
           }
           #(top, left, bottom, right)
