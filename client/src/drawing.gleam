@@ -95,25 +95,15 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     }
 
     PartyPageUpdate(party.Start) -> {
-      let assert PartyPage(party.Model(
-        ws: Some(ws),
-        party: party.KnownParty(party),
-        ..,
-      )) = model.page
-
-      let #(drawing_model, effect) =
-        drawing.init(drawing.DrawingInit(ws:, party:))
+      let assert PartyPage(party.Model(ws: Some(ws), ..)) = model.page
 
       #(
-        Model(..model, page: DrawingPage(drawing_model)),
-        effect.batch([
-          ws.send(
-            ws,
-            messages.StartDrawing
-              |> messages.encode_client_message(),
-          ),
-          effect |> effect.map(DrawingPageUpdate),
-        ]),
+        model,
+        ws.send(
+          ws,
+          messages.StartDrawing
+            |> messages.encode_client_message(),
+        ),
       )
     }
 

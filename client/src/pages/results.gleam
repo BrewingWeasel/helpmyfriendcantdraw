@@ -40,9 +40,13 @@ pub type Msg {
 
 const canvas_id = "final-drawing-canvas"
 
+const save_id = "save-button"
+
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
     ShowDrawing -> {
+      draw_background(canvas_id)
+
       model.history
       |> list.reverse()
       |> drawing.follow_history_for_other_canvas(
@@ -50,6 +54,8 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         [],
         messages.PenSettings(drawing.default_color, drawing.default_size),
       )
+
+      setup_download_button(canvas_id, save_id)
       #(model, effect.none())
     }
     ChatMessage(chat_msg) -> {
@@ -63,6 +69,12 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     ReturnToParty -> panic as "should be handled by the router"
   }
 }
+
+@external(javascript, "./results.ffi.mjs", "setup_download_button")
+fn setup_download_button(canvas_id: String, save_id: String) -> Nil
+
+@external(javascript, "./results.ffi.mjs", "draw_background")
+fn draw_background(canvas_id: String) -> Nil
 
 pub fn view(model: Model) {
   html.div([attribute.class("max-h-screen")], [
@@ -87,6 +99,14 @@ pub fn view(model: Model) {
             event.on_click(ReturnToParty),
           ],
           [html.text("Party Menu")],
+        ),
+        html.button(
+          [attribute.class("bg-rose-200 rounded-lg p-1 mt-2 max-h-12 text-2xl")],
+          [
+            html.a([attribute.download("drawing.png"), attribute.id(save_id)], [
+              element.text("Save drawing"),
+            ]),
+          ],
         ),
       ],
     ),
