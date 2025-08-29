@@ -130,7 +130,12 @@ fn handle_control_action(code: String, parties) {
   |> string.split("\n")
   |> list.filter_map(fn(action) {
     case action {
-      "broadcast " <> message -> Ok(party.Brodcast(message))
+      "broadcast " <> message -> Ok(party.Broadcast(message))
+      "cmd " <> message | "command " <> message ->
+        case string.trim(message) {
+          "/" <> _ as command -> Ok(party.RunCommand(command))
+          command -> Ok(party.RunCommand("/" <> command))
+        }
       "mimic " <> arguments -> {
         case string.split_once(arguments, on: "|") {
           Ok(#(name, message)) -> {

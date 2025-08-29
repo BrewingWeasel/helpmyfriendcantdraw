@@ -55,7 +55,8 @@ pub type Message {
     reply_to: process.Subject(Result(Id, String)),
   )
   ClientMessage(id: Id, message: messages.ClientMessage)
-  Brodcast(message: String)
+  Broadcast(message: String)
+  RunCommand(message: String)
   Mimic(name: String, message: String)
   Leave(id: Id)
 }
@@ -196,11 +197,15 @@ pub fn handle_message(
           }
       }
     }
-    Brodcast(message) -> {
+    Broadcast(message) -> {
       send_to_all(
         model.connections,
         messages.ChatMessage(party.Server(message)),
       )
+      actor.continue(model)
+    }
+    RunCommand(message) -> {
+      use <- try_to_run_command(model, 0, message)
       actor.continue(model)
     }
     Mimic(name, message) -> {
