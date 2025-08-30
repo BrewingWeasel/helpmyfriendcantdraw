@@ -350,13 +350,20 @@ fn server_update(main_model: Model, message) {
     }
     messages.LayoutSet(new_layout) -> {
       use party, _ws <- find_shared_party()
-
       let new_party =
         SharedParty(
           ..party,
           info: shared_party.Party(..party.info, drawings_layout: new_layout),
         )
-
+      #(new_party, effect.none())
+    }
+    messages.OverlapSet(overlap) -> {
+      use party, _ws <- find_shared_party()
+      let new_party =
+        SharedParty(
+          ..party,
+          info: shared_party.Party(..party.info, overlap:),
+        )
       #(new_party, effect.none())
     }
     messages.RequestDrawing -> {

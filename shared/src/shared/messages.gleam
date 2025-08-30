@@ -35,6 +35,7 @@ pub type ClientMessage {
   EndDrawing(history: List(history.HistoryItem))
   SendFinalDrawing(history: List(history.HistoryItem))
   ToggleReady
+  SetOverlap(overlap: Int)
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -80,6 +81,7 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
       #(10, attached_data)
     }
     ToggleReady -> #(11, [])
+    SetOverlap(overlap) -> #(12, [#("overlap", json.int(overlap))])
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -145,6 +147,10 @@ pub fn decode_client_message(
         decode.success(SendFinalDrawing(history:))
       }
       11 -> decode.success(ToggleReady)
+      12 -> {
+        use overlap <- decode.field("overlap", decode.int)
+        decode.success(SetOverlap(overlap:))
+      }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
@@ -169,6 +175,7 @@ pub type ServerMessage {
   LayoutSet(layout: party.DrawingsLayout)
   RequestDrawing
   DrawingFinalized(history: List(history.HistoryItem), x_size: Int, y_size: Int)
+  OverlapSet(overlap: Int)
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -225,6 +232,7 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
       ]
       #(12, attached_data)
     }
+    OverlapSet(overlap) -> #(13, [#("overlap", json.int(overlap))])
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -299,6 +307,10 @@ pub fn decode_server_message(
         use x_size <- decode.field("x_size", decode.int)
         use y_size <- decode.field("y_size", decode.int)
         decode.success(DrawingFinalized(history:, x_size:, y_size:))
+      }
+      13 -> {
+        use overlap <- decode.field("overlap", decode.int)
+        decode.success(OverlapSet(overlap:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }

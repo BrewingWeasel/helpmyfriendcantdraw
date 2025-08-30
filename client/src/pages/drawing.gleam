@@ -111,7 +111,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         right: False,
         width: history.canvas_width,
         height: history.canvas_height,
-        edge: 30,
+        edge: init.party.info.overlap,
       ),
       party: init.party,
       is_ready: False,

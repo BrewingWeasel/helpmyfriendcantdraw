@@ -57,6 +57,7 @@ pub type Msg {
   RemovePlayer(id: Int)
   ChatMessage(chat.Msg)
   SetLayout(party.DrawingsLayout)
+  SetOverlap(Int)
   Start
   CopyCode
 }
@@ -65,6 +66,25 @@ pub type Msg {
 fn write_to_clipboard(code: String) -> Nil
 
 pub fn update(model: Model, msg: Msg) {
+  let update_party_settings = fn(msg, party_updater) {
+    case model.ws {
+      Some(ws) -> {
+        let assert KnownParty(party:) = model.party
+        let party = SharedParty(..party, info: party_updater(party.info))
+
+        #(
+          Model(..model, party: KnownParty(party)),
+          ws.send(
+            ws,
+            msg
+              |> messages.encode_client_message(),
+          ),
+        )
+      }
+      None -> #(model, effect.none())
+    }
+  }
+
   case msg {
     CopyCode -> {
       case model.party {
@@ -105,26 +125,12 @@ pub fn update(model: Model, msg: Msg) {
       )
     }
     SetLayout(new_layout) -> {
-      case model.ws {
-        Some(ws) -> {
-          let assert KnownParty(party:) = model.party
-          let party =
-            SharedParty(
-              ..party,
-              info: party.Party(..party.info, drawings_layout: new_layout),
-            )
-
-          #(
-            Model(..model, party: KnownParty(party)),
-            ws.send(
-              ws,
-              messages.SetLayout(new_layout)
-                |> messages.encode_client_message(),
-            ),
-          )
-        }
-        None -> #(model, effect.none())
-      }
+      use party <- update_party_settings(messages.SetLayout(new_layout))
+      party.Party(..party, drawings_layout: new_layout)
+    }
+    SetOverlap(new_overlap) -> {
+      use party <- update_party_settings(messages.SetOverlap(new_overlap))
+      party.Party(..party, overlap: new_overlap)
     }
     Start -> panic as "shouldn't have to handle"
   }
@@ -169,41 +175,6 @@ pub fn view(model: Model) -> Element(Msg) {
 
       let is_owner = personal_id == 0
 
-      let one_of_options = fn(looped_options, description, viewer, current, msg) {
-        let get_pair = fn(pair) {
-          let #(a, b) = pair
-          case a == current {
-            True -> Ok(b)
-            False -> Error(Nil)
-          }
-        }
-
-        let assert Ok(next) =
-          looped_options
-          |> list.window_by_2()
-          |> list.find_map(get_pair)
-
-        let assert Ok(previous) =
-          looped_options
-          |> list.reverse()
-          |> list.window_by_2()
-          |> list.find_map(get_pair)
-
-        html.div([attribute.class("flex gap-12")], [
-          html.h2([attribute.class("text-2xl mx-4")], [html.text(description)]),
-          html.div([], [
-            html.button(
-              [attribute.class("mx-1"), event.on_click(msg(previous))],
-              [element.text("<")],
-            ),
-            viewer(current),
-            html.button([attribute.class("mx-1"), event.on_click(msg(next))], [
-              element.text(">"),
-            ]),
-          ]),
-        ])
-      }
-
       let settings =
         html.div([attribute.class("grow p-5 bg-slate-100 rounded-xl")], [
           html.h2([attribute.class("text-3xl")], [html.text("Settings")]),
@@ -219,6 +190,21 @@ pub fn view(model: Model) -> Element(Msg) {
               },
               info.drawings_layout,
               SetLayout,
+            ),
+            one_of_options(
+              [30, 50, 80, 0, 30],
+              "overlap:",
+              fn(overlap) {
+                case overlap {
+                  30 -> element.text("Small")
+                  50 -> element.text("Medium")
+                  80 -> element.text("Large")
+                  0 -> element.text("None")
+                  _ -> element.text("Custom")
+                }
+              },
+              info.overlap,
+              SetOverlap,
             ),
             html.button(
               [
@@ -290,5 +276,39 @@ pub fn view(model: Model) -> Element(Msg) {
       ],
       [party_view],
     ),
+  ])
+}
+
+fn one_of_options(looped_options, description, viewer, current, msg) {
+  let get_pair = fn(pair) {
+    let #(a, b) = pair
+    case a == current {
+      True -> Ok(b)
+      False -> Error(Nil)
+    }
+  }
+
+  let assert Ok(next) =
+    looped_options
+    |> list.window_by_2()
+    |> list.find_map(get_pair)
+
+  let assert Ok(previous) =
+    looped_options
+    |> list.reverse()
+    |> list.window_by_2()
+    |> list.find_map(get_pair)
+
+  html.div([attribute.class("flex gap-12")], [
+    html.h2([attribute.class("text-2xl mx-4")], [html.text(description)]),
+    html.div([], [
+      html.button([attribute.class("mx-1"), event.on_click(msg(previous))], [
+        element.text("<"),
+      ]),
+      viewer(current),
+      html.button([attribute.class("mx-1"), event.on_click(msg(next))], [
+        element.text(">"),
+      ]),
+    ]),
   ])
 }

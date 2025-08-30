@@ -5,7 +5,11 @@ import gleam/json
 import gleam/result
 
 pub type Party {
-  Party(players: dict.Dict(Int, Player), drawings_layout: DrawingsLayout)
+  Party(
+    players: dict.Dict(Int, Player),
+    drawings_layout: DrawingsLayout,
+    overlap: Int,
+  )
 }
 
 pub type DrawingsLayout {
@@ -74,10 +78,11 @@ pub fn chat_message_decoder() -> decode.Decoder(ChatMessage) {
 }
 
 pub fn to_json(party: Party) -> json.Json {
-  let Party(players:, drawings_layout:) = party
+  let Party(players:, drawings_layout:, overlap:) = party
   json.object([
     #("players", json.dict(players, int.to_string, player_to_json)),
     #("drawings_layout", drawings_layout_to_json(drawings_layout)),
+    #("overlap", json.int(overlap)),
   ])
 }
 
@@ -93,7 +98,8 @@ pub fn decoder() -> decode.Decoder(Party) {
     "drawings_layout",
     drawings_layout_decoder(),
   )
-  decode.success(Party(players:, drawings_layout:))
+  use overlap <- decode.field("overlap", decode.int)
+  decode.success(Party(players:, drawings_layout:, overlap:))
 }
 
 pub type Player {
@@ -114,5 +120,6 @@ pub fn new(name: String) -> Party {
   Party(
     players: dict.from_list([#(0, Player(name))]),
     drawings_layout: Horizontal,
+    overlap: 30,
   )
 }

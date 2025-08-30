@@ -448,9 +448,12 @@ pub fn handle_message(
         }
         messages.SetLayout(layout) -> {
           let party = party.Party(..model.party, drawings_layout: layout)
-
           send_to_all(model.connections, messages.LayoutSet(layout))
-
+          actor.continue(Model(..model, party:))
+        }
+        messages.SetOverlap(overlap) -> {
+          let party = party.Party(..model.party, overlap:)
+          send_to_all(model.connections, messages.OverlapSet(overlap))
           actor.continue(Model(..model, party:))
         }
         messages.EndDrawing(history) -> {
