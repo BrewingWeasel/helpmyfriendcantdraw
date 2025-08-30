@@ -1,9 +1,13 @@
 import gleam/erlang/process
+import gleam/otp/actor
 import gleam/otp/static_supervisor as supervisor
+import gleam/time/duration
 import http
 import logging.{Notice}
+import parties
 import settings
 import simplifile
+import timers
 import watcher
 import wisp
 
@@ -18,6 +22,7 @@ pub fn main() {
   let initializer_subject = process.new_subject()
 
   let settings_name = process.new_name("settings")
+  let timers_name = process.new_name("timers")
   let parties_manager_name = process.new_name("parties_manager")
 
   let watcher_starter_name = process.new_name("watcher_starter")
@@ -27,6 +32,7 @@ pub fn main() {
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(settings.supervised(settings_name))
     |> supervisor.add(watcher.supervised(watcher_starter_name, watcher_name))
+    |> supervisor.add(timers.supervised(timers_name))
     |> supervisor.add(http.supervised(
       initializer_subject,
       static_directory,
@@ -43,8 +49,8 @@ pub fn main() {
   process.send(watcher_starter_actor, watcher.Init)
 
   let settings_actor = process.named_subject(settings_name)
-
   let watcher_actor = process.named_subject(watcher_name)
+  let timers_actor = process.named_subject(timers_name)
 
   // wait for watcher to start
   process.sleep(300)
@@ -60,9 +66,13 @@ pub fn main() {
     logging.log(logging.Debug, "Sent init to http process")
     // wait for parties manager to start
     process.sleep(1000)
-    watcher.set_parties_manager_actor(
-      watcher_actor,
-      process.named_subject(parties_manager_name),
+    let parties_manager = process.named_subject(parties_manager_name)
+    watcher.set_parties_manager_actor(watcher_actor, parties_manager)
+    timers.add_timer_on_loop(
+      timers_actor,
+      "inactive_parties",
+      duration.minutes(2),
+      fn() { parties.check_inactive_parties(parties_manager) },
     )
   }
 

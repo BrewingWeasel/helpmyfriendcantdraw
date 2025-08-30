@@ -27,6 +27,7 @@ pub type Message {
   GetParty(code: String, reply_to: Subject(Result(party.PartyActor, Nil)))
   CloseParty(code: String)
   ControlAction(party: String)
+  CheckInactiveParties
 }
 
 const alphabet = [
@@ -81,6 +82,10 @@ pub fn control_action(manager: process.Subject(Message), party: String) -> Nil {
   actor.send(manager, ControlAction(party))
 }
 
+pub fn check_inactive_parties(manager: process.Subject(Message)) -> Nil {
+  actor.send(manager, CheckInactiveParties)
+}
+
 fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) {
   case message {
     NewParty(name, conn, reply_to) -> {
@@ -100,6 +105,14 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
     CloseParty(code) -> {
       logging.log(logging.Notice, "Closing party with code: " <> code)
       actor.continue(Model(..model, parties: dict.delete(model.parties, code)))
+    }
+    CheckInactiveParties -> {
+      model.parties
+      |> dict.values()
+      |> list.each(fn(party) {
+        actor.send(party.data, party.CheckForInactivity)
+      })
+      actor.continue(model)
     }
     ControlAction(party_code) -> {
       logging.log(logging.Notice, "Received control action for " <> party_code)

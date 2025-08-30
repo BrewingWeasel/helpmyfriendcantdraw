@@ -3,9 +3,12 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process
 import gleam/int
 import gleam/list
+import gleam/order
 import gleam/otp/actor
 import gleam/result
 import gleam/string
+import gleam/time/duration
+import gleam/time/timestamp
 import logging
 import settings
 import shared/history.{type Direction, Down, Left, Right, Up}
@@ -30,6 +33,7 @@ pub type Model {
     muted_status: MutedStatus,
     locked: Bool,
     settings: settings.SettingsSubject,
+    last_message_timestamp: timestamp.Timestamp,
   )
 }
 
@@ -59,6 +63,7 @@ pub type Message {
   RunCommand(message: String)
   Mimic(name: String, message: String)
   Leave(id: Id)
+  CheckForInactivity
 }
 
 pub type PartyActor =
@@ -83,6 +88,7 @@ pub fn create(
       muted_status: Individuals([]),
       locked: False,
       settings:,
+      last_message_timestamp: timestamp.system_time(),
     ))
     |> actor.on_message(handle_message)
     |> actor.start()
@@ -208,6 +214,22 @@ pub fn handle_message(
       use <- try_to_run_command(model, 0, message)
       actor.continue(model)
     }
+    CheckForInactivity -> {
+      let current_time = timestamp.system_time()
+      let difference =
+        timestamp.difference(model.last_message_timestamp, current_time)
+
+      case duration.compare(difference, duration.minutes(5)) {
+        order.Gt | order.Eq -> {
+          send_to_all(
+            model.connections,
+            messages.Disconnected("Party was closed due to inactivity"),
+          )
+          actor.stop()
+        }
+        order.Lt -> actor.continue(model)
+      }
+    }
     Mimic(name, message) -> {
       let user =
         model.party.players
@@ -258,6 +280,9 @@ pub fn handle_message(
           Error(_) -> Nil
         }
       }
+
+      let model =
+        Model(..model, last_message_timestamp: timestamp.system_time())
 
       case message {
         messages.KickUser(id_to_kick) -> {
