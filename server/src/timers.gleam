@@ -16,6 +16,7 @@ pub type Model {
 
 pub type Message {
   AddTimer(id: String, duration: duration.Duration, call_after: fn() -> Nil)
+  CancelTimer(id: String)
   Tick
 }
 
@@ -38,6 +39,10 @@ fn start(name) {
   |> actor.on_message(handle_message)
   |> actor.named(name)
   |> actor.start()
+}
+
+pub fn cancel(timers: TimersSubject, id: String) -> Nil {
+  actor.send(timers, CancelTimer(id))
 }
 
 pub fn add_timer(
@@ -107,6 +112,10 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
           )),
         ),
       )
+    }
+    CancelTimer(id) -> {
+      logging.log(logging.Debug, "cancelling timer with id " <> id)
+      actor.continue(Model(timers: dict.delete(model.timers, id)))
     }
   }
 }

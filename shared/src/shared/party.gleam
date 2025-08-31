@@ -2,6 +2,7 @@ import gleam/dict
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
+import gleam/option
 import gleam/result
 
 pub type Party {
@@ -9,6 +10,7 @@ pub type Party {
     players: dict.Dict(Int, Player),
     drawings_layout: DrawingsLayout,
     overlap: Int,
+    duration: option.Option(Int),
   )
 }
 
@@ -78,11 +80,15 @@ pub fn chat_message_decoder() -> decode.Decoder(ChatMessage) {
 }
 
 pub fn to_json(party: Party) -> json.Json {
-  let Party(players:, drawings_layout:, overlap:) = party
+  let Party(players:, drawings_layout:, overlap:, duration:) = party
   json.object([
     #("players", json.dict(players, int.to_string, player_to_json)),
     #("drawings_layout", drawings_layout_to_json(drawings_layout)),
     #("overlap", json.int(overlap)),
+    #("duration", case duration {
+      option.Some(d) -> json.int(d)
+      option.None -> json.null()
+    }),
   ])
 }
 
@@ -99,7 +105,8 @@ pub fn decoder() -> decode.Decoder(Party) {
     drawings_layout_decoder(),
   )
   use overlap <- decode.field("overlap", decode.int)
-  decode.success(Party(players:, drawings_layout:, overlap:))
+  use duration <- decode.field("duration", decode.optional(decode.int))
+  decode.success(Party(players:, drawings_layout:, overlap:, duration:))
 }
 
 pub type Player {
@@ -121,5 +128,6 @@ pub fn new(name: String) -> Party {
     players: dict.from_list([#(0, Player(name))]),
     drawings_layout: Horizontal,
     overlap: 30,
+    duration: option.None,
   )
 }

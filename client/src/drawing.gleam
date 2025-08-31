@@ -1,6 +1,7 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import components/chat
+import components/countdown_timer
 import gleam/dict
 import gleam/io
 import gleam/option.{type Option, None, Some}
@@ -23,6 +24,9 @@ import lustre_websocket as ws
 
 pub fn main() {
   let app = lustre.application(init, update, view)
+
+  let assert Ok(Nil) = countdown_timer.register()
+
   let assert Ok(_) = lustre.start(app, "#app", Nil)
 
   Nil
@@ -271,7 +275,7 @@ fn server_update(main_model: Model, message) {
       let chat = chat.handle_chat_message(party.chat, message)
       #(SharedParty(..party, chat:), effect.none())
     }
-    messages.DrawingInit(top:, left:, bottom:, right:) -> {
+    messages.DrawingInit(top:, left:, bottom:, right:, server_start_timestamp:) -> {
       let init_drawing = fn(model, top, left, bottom, right) {
         Model(
           ..main_model,
@@ -296,7 +300,11 @@ fn server_update(main_model: Model, message) {
         PartyPage(party.Model(ws: Some(ws), party: party.KnownParty(party), ..))
         | ResultsPage(results.Model(ws: Some(ws), party:, ..)) -> {
           let #(drawing_model, effects) =
-            drawing.init(drawing.DrawingInit(ws:, party:))
+            drawing.init(drawing.DrawingInit(
+              ws:,
+              party:,
+              server_start_timestamp:,
+            ))
 
           #(
             init_drawing(drawing_model, top, left, bottom, right),
@@ -360,10 +368,13 @@ fn server_update(main_model: Model, message) {
     messages.OverlapSet(overlap) -> {
       use party, _ws <- find_shared_party()
       let new_party =
-        SharedParty(
-          ..party,
-          info: shared_party.Party(..party.info, overlap:),
-        )
+        SharedParty(..party, info: shared_party.Party(..party.info, overlap:))
+      #(new_party, effect.none())
+    }
+    messages.DurationSet(duration) -> {
+      use party, _ws <- find_shared_party()
+      let new_party =
+        SharedParty(..party, info: shared_party.Party(..party.info, duration:))
       #(new_party, effect.none())
     }
     messages.RequestDrawing -> {

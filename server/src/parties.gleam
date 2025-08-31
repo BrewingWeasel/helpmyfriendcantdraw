@@ -9,12 +9,14 @@ import logging
 import party
 import settings
 import simplifile
+import timers
 import ws
 
 pub type Model {
   Model(
     parties: Dict(String, party.PartyActor),
     settings: settings.SettingsSubject,
+    timer: timers.TimersSubject,
   )
 }
 
@@ -51,9 +53,10 @@ pub type PartiesManager =
 
 pub fn start(
   settings: settings.SettingsSubject,
+  timer: timers.TimersSubject,
   name: process.Name(Message),
 ) -> Result(actor.Started(Subject(Message)), actor.StartError) {
-  actor.new(Model(parties: dict.new(), settings:))
+  actor.new(Model(parties: dict.new(), settings:, timer:))
   |> actor.on_message(handle_message)
   |> actor.named(name)
   |> actor.start()
@@ -90,7 +93,8 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
   case message {
     NewParty(name, conn, reply_to) -> {
       let party_code = create_party_code()
-      let party = party.create(name, conn, model.settings)
+      let party =
+        party.create(name, party_code, conn, model.settings, model.timer)
       actor.send(reply_to, #(party_code, party))
 
       actor.continue(

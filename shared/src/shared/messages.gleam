@@ -1,3 +1,4 @@
+import gleam/option
 import gleam/dynamic/decode
 import gleam/json
 import shared/history
@@ -36,6 +37,7 @@ pub type ClientMessage {
   SendFinalDrawing(history: List(history.HistoryItem))
   ToggleReady
   SetOverlap(overlap: Int)
+  SetDuration(duration: option.Option(Int))
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -82,6 +84,13 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     }
     ToggleReady -> #(11, [])
     SetOverlap(overlap) -> #(12, [#("overlap", json.int(overlap))])
+    SetDuration(duration) -> {
+      let attached_data = [#("duration", case duration {
+        option.Some(d) -> json.int(d)
+        option.None -> json.null()
+      })]
+      #(13, attached_data)
+    }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -151,6 +160,13 @@ pub fn decode_client_message(
         use overlap <- decode.field("overlap", decode.int)
         decode.success(SetOverlap(overlap:))
       }
+      13 -> {
+        use duration <- decode.field(
+          "duration",
+          decode.optional(decode.int),
+        )
+        decode.success(SetDuration(duration:))
+      }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
@@ -164,7 +180,7 @@ pub type ServerMessage {
   UserLeft(id: Int)
   Disconnected(reason: String)
   ChatMessage(message: party.ChatMessage)
-  DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool)
+  DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool, server_start_timestamp: Int)
   DrawingSent(
     history: List(history.HistoryItem),
     pen_settings: PenSettings,
@@ -176,6 +192,7 @@ pub type ServerMessage {
   RequestDrawing
   DrawingFinalized(history: List(history.HistoryItem), x_size: Int, y_size: Int)
   OverlapSet(overlap: Int)
+  DurationSet(duration: option.Option(Int))
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -194,12 +211,13 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     ChatMessage(message) -> #(5, [
       #("message", party.chat_message_to_json(message)),
     ])
-    DrawingInit(top, left, right, bottom) -> {
+    DrawingInit(top, left, right, bottom, server_start_timestamp) -> {
       let attached_data = [
         #("top", json.bool(top)),
         #("left", json.bool(left)),
         #("right", json.bool(right)),
         #("bottom", json.bool(bottom)),
+        #("server_start_timestamp", json.int(server_start_timestamp)),
       ]
       #(6, attached_data)
     }
@@ -233,6 +251,13 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
       #(12, attached_data)
     }
     OverlapSet(overlap) -> #(13, [#("overlap", json.int(overlap))])
+    DurationSet(duration) -> {
+      let attached_data = [#("duration", case duration {
+        option.Some(d) -> json.int(d)
+        option.None -> json.null()
+      })]
+      #(14, attached_data)
+    }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -275,7 +300,8 @@ pub fn decode_server_message(
         use left <- decode.field("left", decode.bool)
         use right <- decode.field("right", decode.bool)
         use bottom <- decode.field("bottom", decode.bool)
-        decode.success(DrawingInit(top:, left:, right:, bottom:))
+        use server_start_timestamp <- decode.field("server_start_timestamp", decode.int)
+        decode.success(DrawingInit(top:, left:, right:, bottom:, server_start_timestamp:))
       }
       7 -> {
         use history <- decode.field(
@@ -311,6 +337,13 @@ pub fn decode_server_message(
       13 -> {
         use overlap <- decode.field("overlap", decode.int)
         decode.success(OverlapSet(overlap:))
+      }
+      14 -> {
+        use duration <- decode.field(
+          "duration",
+          decode.optional(decode.int),
+        )
+        decode.success(DurationSet(duration:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }

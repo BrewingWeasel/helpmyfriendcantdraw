@@ -1,8 +1,10 @@
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/erlang/process
+import gleam/float
 import gleam/int
 import gleam/list
+import gleam/option
 import gleam/order
 import gleam/otp/actor
 import gleam/result
@@ -14,6 +16,7 @@ import settings
 import shared/history.{type Direction, Down, Left, Right, Up}
 import shared/messages
 import shared/party
+import timers
 import ws
 
 pub type Id =
@@ -23,6 +26,7 @@ pub type Model {
   Model(
     party_member_index: Int,
     party: party.Party,
+    code: String,
     connections: Dict(Id, ws.Connection),
     directions: Dict(Id, NeighborDetails),
     full_drawing: List(history.HistoryItem),
@@ -34,6 +38,8 @@ pub type Model {
     locked: Bool,
     settings: settings.SettingsSubject,
     last_message_timestamp: timestamp.Timestamp,
+    timer: timers.TimersSubject,
+    subject: process.Subject(Message),
   )
 }
 
@@ -63,6 +69,7 @@ pub type Message {
   RunCommand(message: String)
   Mimic(name: String, message: String)
   Leave(id: Id)
+  EndDrawing
   CheckForInactivity
 }
 
@@ -71,25 +78,35 @@ pub type PartyActor =
 
 pub fn create(
   player: String,
+  code: String,
   conn: ws.Connection,
   settings: settings.SettingsSubject,
+  timer: timers.TimersSubject,
 ) -> PartyActor {
   let assert Ok(actor) =
-    actor.new(Model(
-      party_member_index: 0,
-      party: party.new(player),
-      connections: dict.from_list([#(0, conn)]),
-      directions: dict.new(),
-      full_drawing: [],
-      drawing_status: dict.new(),
-      full_drawing_x_size: 0,
-      full_drawing_y_size: 0,
-      removed_players: [],
-      muted_status: Individuals([]),
-      locked: False,
-      settings:,
-      last_message_timestamp: timestamp.system_time(),
-    ))
+    actor.new_with_initialiser(100, fn(subject) {
+      Ok(
+        actor.initialised(Model(
+          party_member_index: 0,
+          party: party.new(player),
+          code:,
+          connections: dict.from_list([#(0, conn)]),
+          directions: dict.new(),
+          full_drawing: [],
+          drawing_status: dict.new(),
+          full_drawing_x_size: 0,
+          full_drawing_y_size: 0,
+          removed_players: [],
+          muted_status: Individuals([]),
+          locked: False,
+          settings:,
+          last_message_timestamp: timestamp.system_time(),
+          timer:,
+          subject:,
+        ))
+        |> actor.returning(subject),
+      )
+    })
     |> actor.on_message(handle_message)
     |> actor.start()
   actor
@@ -254,6 +271,10 @@ pub fn handle_message(
         }
       }
 
+      actor.continue(model)
+    }
+    EndDrawing -> {
+      send_to_all(model.connections, messages.RequestDrawing)
       actor.continue(model)
     }
     ClientMessage(id, message) -> {
@@ -423,11 +444,26 @@ pub fn handle_message(
                     left: dict.has_key(neighbors, Left),
                     right: dict.has_key(neighbors, Right),
                     bottom: dict.has_key(neighbors, Down),
+                    server_start_timestamp: timestamp.system_time()
+                      |> timestamp.to_unix_seconds()
+                      |> float.round(),
                   ),
                 )
               Error(_) -> Nil
             }
           })
+
+          case model.party.duration {
+            option.Some(duration) -> {
+              timers.add_timer(
+                model.timer,
+                model.code <> " timer",
+                duration.seconds(duration),
+                fn() { process.send(model.subject, EndDrawing) },
+              )
+            }
+            option.None -> Nil
+          }
 
           actor.continue(
             Model(
@@ -454,6 +490,11 @@ pub fn handle_message(
         messages.SetOverlap(overlap) -> {
           let party = party.Party(..model.party, overlap:)
           send_to_all(model.connections, messages.OverlapSet(overlap))
+          actor.continue(Model(..model, party:))
+        }
+        messages.SetDuration(duration) -> {
+          let party = party.Party(..model.party, duration:)
+          send_to_all(model.connections, messages.DurationSet(duration))
           actor.continue(Model(..model, party:))
         }
         messages.EndDrawing(history) -> {
@@ -710,6 +751,8 @@ fn add_drawing_to_history(model: Model, id, history) {
 
       case all_sent {
         True -> {
+          timers.cancel(model.timer, model.code <> " timer")
+
           model.connections
           |> dict.values()
           |> list.each(fn(connection) {

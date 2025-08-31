@@ -1,5 +1,6 @@
 import components/chat
 import gleam/dict
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
@@ -58,6 +59,7 @@ pub type Msg {
   ChatMessage(chat.Msg)
   SetLayout(party.DrawingsLayout)
   SetOverlap(Int)
+  SetDuration(Option(Int))
   Start
   CopyCode
 }
@@ -132,6 +134,10 @@ pub fn update(model: Model, msg: Msg) {
       use party <- update_party_settings(messages.SetOverlap(new_overlap))
       party.Party(..party, overlap: new_overlap)
     }
+    SetDuration(new_duration) -> {
+      use party <- update_party_settings(messages.SetDuration(new_duration))
+      party.Party(..party, duration: new_duration)
+    }
     Start -> panic as "shouldn't have to handle"
   }
 }
@@ -205,6 +211,30 @@ pub fn view(model: Model) -> Element(Msg) {
               },
               info.overlap,
               SetOverlap,
+            ),
+            one_of_options(
+              [
+                option.None,
+                option.Some(5 * 60),
+                option.Some(3 * 60),
+                option.Some(60),
+                option.Some(30),
+                option.None,
+              ],
+              "timer:",
+              fn(timer) {
+                case timer {
+                  option.None -> element.text("No timer")
+                  option.Some(300) -> element.text("5:00")
+                  option.Some(180) -> element.text("3:00")
+                  option.Some(60) -> element.text("1:00")
+                  option.Some(30) -> element.text("0:30")
+                  option.Some(secs) ->
+                    element.text(int.to_string(secs) <> " seconds")
+                }
+              },
+              info.duration,
+              SetDuration,
             ),
             html.button(
               [

@@ -1,5 +1,4 @@
 import gleam/erlang/process
-import gleam/otp/actor
 import gleam/otp/static_supervisor as supervisor
 import gleam/time/duration
 import http
@@ -61,7 +60,11 @@ pub fn main() {
     logging.log(logging.Debug, "Received init subject from http process")
     process.send(
       init_subject,
-      http.Init(settings: settings_actor, parties_manager_name:),
+      http.Init(
+        settings: settings_actor,
+        parties_manager_name:,
+        timer: timers_actor,
+      ),
     )
     logging.log(logging.Debug, "Sent init to http process")
     // wait for parties manager to start

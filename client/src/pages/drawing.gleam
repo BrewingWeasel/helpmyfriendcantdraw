@@ -1,6 +1,7 @@
 // IMPORTS ---------------------------------------------------------------------
 
 import components/chat
+import components/countdown_timer
 import components/icons
 import gleam/dynamic/decode
 import gleam/int
@@ -73,11 +74,16 @@ pub type Model {
     party: party.SharedParty,
     is_ready: Bool,
     cursor_details: CursorDetails,
+    server_start_timestamp: Int,
   )
 }
 
 pub type DrawingInit {
-  DrawingInit(ws: ws.WebSocket, party: party.SharedParty)
+  DrawingInit(
+    ws: ws.WebSocket,
+    party: party.SharedParty,
+    server_start_timestamp: Int,
+  )
 }
 
 pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
@@ -116,6 +122,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
       party: init.party,
       is_ready: False,
       cursor_details: setup_cursor_details(),
+      server_start_timestamp: init.server_start_timestamp,
     )
   #(model, effect.after_paint(fn(dispatch, _) { dispatch(Reset) }))
 }
@@ -799,6 +806,12 @@ pub fn view(model: Model) -> Element(Msg) {
     False -> element.none()
   }
 
+  let timer = case model.party.info.duration {
+    Some(duration) ->
+      countdown_timer.element(duration, model.server_start_timestamp)
+    None -> element.none()
+  }
+
   html.div(
     [
       attribute.class(
@@ -820,6 +833,7 @@ ctx =
       html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
         html.div([], [
+          timer,
           view_drawing_ui(model.pen_settings),
           canvas,
           html.div([], [

@@ -16,6 +16,7 @@ import parties
 import party
 import settings
 import shared/messages
+import timers
 import wisp
 import wisp/wisp_mist
 import ws
@@ -23,6 +24,7 @@ import ws
 pub type Init {
   Init(
     settings: settings.SettingsSubject,
+    timer: timers.TimersSubject,
     parties_manager_name: process.Name(parties.Message),
   )
 }
@@ -48,7 +50,11 @@ pub fn supervised(main_process, static_directory, index_html) {
 fn start(static_directory, index_html, init_details: Init) {
   logging.log(Notice, "Starting http")
   let assert Ok(parties_manager) =
-    parties.start(init_details.settings, init_details.parties_manager_name)
+    parties.start(
+      init_details.settings,
+      init_details.timer,
+      init_details.parties_manager_name,
+    )
   logging.log(Notice, "Parties manager started")
 
   let selector = process.new_selector()
