@@ -33,10 +33,11 @@ FROM ghcr.io/gleam-lang/gleam:${GLEAM_VERSION}-erlang-alpine
 COPY --from=builder /build/server/build/erlang-shipment /app
 
 RUN apk add inotify-tools
+RUN apk add envsubst
 
 # Set up the entrypoint
 WORKDIR /app
-RUN echo -e '#!/bin/sh\nexec ./entrypoint.sh "$1"' > ./start.sh \
+RUN echo -e '#!/bin/sh\n ERL_AFLAGS=$(echo "$ERL_AFLAGS" | envsubst) exec ./entrypoint.sh "$1"' > ./start.sh \
   && chmod +x ./start.sh
 
 # Set environment variables

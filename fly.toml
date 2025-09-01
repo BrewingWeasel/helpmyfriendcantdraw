@@ -6,6 +6,10 @@
 app = 'helpmyfriendcantdraw'
 primary_region = 'sea'
 
+[env]
+# TODO: FLY_IMAGE_REF ?
+ERL_AFLAGS = "-proto_dist inet6_tcp -name ${FLY_APP_NAME}@${FLY_PRIVATE_IP} -setcookie $ERLANG_COOKIE"
+
 [build]
 
 [http_service]

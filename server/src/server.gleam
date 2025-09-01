@@ -1,4 +1,8 @@
+import barnacle
+import envoy
+import gleam/erlang/node
 import gleam/erlang/process
+import gleam/option
 import gleam/otp/static_supervisor as supervisor
 import gleam/time/duration
 import http
@@ -12,6 +16,22 @@ import wisp
 
 pub fn main() {
   logging.configure()
+
+  let base_supervisor = supervisor.new(supervisor.OneForOne)
+
+  let supervisor = case envoy.get("FLY_APP_NAME") {
+    Ok(app_name) -> {
+      let assert Ok(basename) = barnacle.get_node_basename(node.self())
+
+      let barnacle =
+        barnacle.dns(basename, app_name <> ".internal", option.Some(15_000))
+        |> barnacle.with_poll_interval(15_000)
+
+      base_supervisor
+      |> supervisor.add(barnacle.supervised(barnacle, process.new_subject()))
+    }
+    Error(Nil) -> base_supervisor
+  }
 
   let assert Ok(priv_directory) = wisp.priv_directory("server")
   let static_directory = priv_directory <> "/static"
@@ -28,7 +48,7 @@ pub fn main() {
   let watcher_name = process.new_name("watcher")
 
   let assert Ok(_) =
-    supervisor.new(supervisor.OneForOne)
+    supervisor
     |> supervisor.add(settings.supervised(settings_name))
     |> supervisor.add(watcher.supervised(watcher_starter_name, watcher_name))
     |> supervisor.add(timers.supervised(timers_name))
