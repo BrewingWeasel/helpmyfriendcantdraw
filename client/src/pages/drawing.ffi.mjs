@@ -137,3 +137,9 @@ export function set_cursor(cursor_details, size, color, scale = window.devicePix
         canvas.style.cursor = `url(${cursor_details.url}) ${size / 2} ${size / 2}, auto`;
     });
 }
+
+export function add_key_listener(handler) { 
+	document.onkeydown = (event) => {
+		handler(event.key, event.shiftKey, event.metaKey)
+	}
+}

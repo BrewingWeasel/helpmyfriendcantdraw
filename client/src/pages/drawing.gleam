@@ -5,6 +5,7 @@ import components/countdown_timer
 import components/icons
 import gleam/dynamic/decode
 import gleam/int
+import gleam/javascript/array
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -75,6 +76,7 @@ pub type Model {
     is_ready: Bool,
     cursor_details: CursorDetails,
     server_start_timestamp: Int,
+    colors: array.Array(String),
   )
 }
 
@@ -123,8 +125,38 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
       is_ready: False,
       cursor_details: setup_cursor_details(),
       server_start_timestamp: init.server_start_timestamp,
+      colors: array.from_list([
+        "#000000", "#ffffff", "#006400", "#bdb76b", "#00008b", "#48d1cc",
+        "#ff0000", "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff",
+        "#ff00ff", "#6495ed", "#ff1493", "#ffb6c1",
+      ]),
     )
-  #(model, effect.after_paint(fn(dispatch, _) { dispatch(Reset) }))
+  #(
+    model,
+    effect.batch([
+      effect.after_paint(fn(dispatch, _) { dispatch(Reset) }),
+      effect.from(fn(dispatch) { add_key_listener(keybinds_handler(dispatch)) }),
+    ]),
+  )
+}
+
+@external(javascript, "./drawing.ffi.mjs", "add_key_listener")
+fn add_key_listener(callback: fn(String, Bool, Bool) -> Nil) -> Nil
+
+fn keybinds_handler(dispatch) {
+  fn(key, shift_key, meta_key) {
+    case key {
+      "u" -> dispatch(BackHistory)
+      "z" if meta_key && !shift_key -> dispatch(BackHistory)
+      "r" -> dispatch(ForwardHistory)
+      "z" if meta_key && shift_key -> dispatch(ForwardHistory)
+      "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> {
+        let assert Ok(index) = int.parse(key)
+        dispatch(SetColorIndex(index - 1))
+      }
+      _ -> Nil
+    }
+  }
 }
 
 // UPDATE ----------------------------------------------------------------------
@@ -133,6 +165,7 @@ pub type Msg {
   MouseMoved(x: Int, y: Int)
   StartDrawing(x: Int, y: Int)
   SetColor(color: String)
+  SetColorIndex(index: Int)
   SetSize(size: Int)
   StopDrawing
   BackHistory
@@ -143,6 +176,7 @@ pub type Msg {
   EndDrawing
   ToggleReady
   MouseEnter(mouse_down: Bool, x: Int, y: Int)
+  EmptyMsg
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -511,16 +545,12 @@ pub fn update(model: Model, msg: Msg) {
       }
     }
     SetColor(color) -> {
-      set_color(color)
-      set_cursor(model.cursor_details, model.pen_settings.size, color)
-      #(
-        Model(
-          ..model,
-          pen_settings: PenSettings(..model.pen_settings, color:),
-          history: [Color(color), ..model.history],
-        ),
-        effect.none(),
-      )
+      update_color(model, color)
+    }
+    SetColorIndex(index) -> {
+      let color =
+        model.colors |> array.get(index) |> result.unwrap(default_color)
+      update_color(model, color)
     }
     SetSize(size) -> {
       set_size(size)
@@ -570,7 +600,21 @@ pub fn update(model: Model, msg: Msg) {
         ),
       )
     }
+    EmptyMsg -> #(model, effect.none())
   }
+}
+
+fn update_color(model: Model, color: String) -> #(Model, effect.Effect(Msg)) {
+  set_color(color)
+  set_cursor(model.cursor_details, model.pen_settings.size, color)
+  #(
+    Model(
+      ..model,
+      pen_settings: PenSettings(..model.pen_settings, color:),
+      history: [Color(color), ..model.history],
+    ),
+    effect.none(),
+  )
 }
 
 fn start_drawing(
@@ -834,7 +878,7 @@ ctx =
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
         html.div([], [
           timer,
-          view_drawing_ui(model.pen_settings),
+          view_drawing_ui(model.colors, model.pen_settings),
           canvas,
           html.div([], [
             html.button(
@@ -910,16 +954,13 @@ fn view_vertical_canvas_edge(exists, edge, main_class, model: Model) {
   }
 }
 
-fn view_drawing_ui(pen_settings: PenSettings) -> Element(Msg) {
-  let colors = [
-    "#000000", "#ffffff", "#006400", "#bdb76b", "#00008b", "#48d1cc", "#ff0000",
-    "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff", "#ff00ff", "#6495ed",
-    "#ff1493", "#ffb6c1",
-  ]
-
+fn view_drawing_ui(
+  colors: array.Array(String),
+  pen_settings: PenSettings,
+) -> Element(Msg) {
   let color_buttons =
     colors
-    |> list.map(fn(color) {
+    |> array.map(fn(color) {
       let outline = case color == pen_settings.color {
         True -> "border-2 border-slate-600"
         False -> "border border-slate-300"
@@ -933,6 +974,7 @@ fn view_drawing_ui(pen_settings: PenSettings) -> Element(Msg) {
         [],
       )
     })
+    |> array.to_list()
 
   let size_buttons =
     [6, 12, 36, 128]
