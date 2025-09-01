@@ -3,6 +3,7 @@
 import components/chat
 import components/countdown_timer
 import components/icons
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/int
 import gleam/javascript/array
@@ -569,23 +570,21 @@ pub fn update(model: Model, msg: Msg) {
       update_color(model, color)
     }
     SizeLower -> {
-      let new_size =
-        case model.pen_settings.size {
-          s if s == pen_size_2 -> pen_size_1
-          s if s == pen_size_3 -> pen_size_2
-          s if s == pen_size_4 -> pen_size_3
-          size -> size
-        }
+      let new_size = case model.pen_settings.size {
+        s if s == pen_size_2 -> pen_size_1
+        s if s == pen_size_3 -> pen_size_2
+        s if s == pen_size_4 -> pen_size_3
+        size -> size
+      }
       update_size(model, new_size)
     }
     SizeIncrease -> {
-      let new_size =
-        case model.pen_settings.size {
-          s if s == pen_size_1 -> pen_size_2
-          s if s == pen_size_2 -> pen_size_3
-          s if s == pen_size_3 -> pen_size_4
-          size -> size
-        }
+      let new_size = case model.pen_settings.size {
+        s if s == pen_size_1 -> pen_size_2
+        s if s == pen_size_2 -> pen_size_3
+        s if s == pen_size_3 -> pen_size_4
+        size -> size
+      }
       update_size(model, new_size)
     }
     SetSize(size) -> {
@@ -1070,6 +1069,13 @@ fn view_drawing_ui(
 
 fn stop_drawing(model: Model) {
   end_drawing()
+
+  let no_changes = case model.history {
+    [PenUp, ..] -> True
+    _ -> False
+  }
+
+  use <- bool.guard(when: no_changes, return: #(model, effect.none()))
 
   let recent_drawn =
     list.take_while(model.history, fn(item) {
