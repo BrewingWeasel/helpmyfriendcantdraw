@@ -22,7 +22,17 @@ import shared/party
 
 import lustre_websocket as ws
 
-pub const default_size = 12
+const pen_size_1 = 6
+
+const pen_size_2 = 12
+
+const pen_size_3 = 36
+
+const pen_size_4 = 128
+
+const pen_sizes = [pen_size_1, pen_size_2, pen_size_3, pen_size_4]
+
+pub const default_size = pen_size_2
 
 pub const default_color = "#000000"
 
@@ -154,6 +164,10 @@ fn keybinds_handler(dispatch) {
         let assert Ok(index) = int.parse(key)
         dispatch(SetColorIndex(index - 1))
       }
+      "[" -> dispatch(SizeLower)
+      "{" -> dispatch(SetSize(pen_size_1))
+      "]" -> dispatch(SizeIncrease)
+      "}" -> dispatch(SetSize(pen_size_4))
       _ -> Nil
     }
   }
@@ -177,6 +191,8 @@ pub type Msg {
   ToggleReady
   MouseEnter(mouse_down: Bool, x: Int, y: Int)
   EmptyMsg
+  SizeLower
+  SizeIncrease
 }
 
 @external(javascript, "./drawing.ffi.mjs", "draw_at_other_canvas")
@@ -428,8 +444,8 @@ pub fn update(model: Model, msg: Msg) {
     Reset -> {
       clear()
       model.history |> list.reverse() |> follow_history()
-      set_color(model.pen_settings.color)
-      set_size(model.pen_settings.size)
+      canvas_set_color(model.pen_settings.color)
+      canvas_set_size(model.pen_settings.size)
       set_cursor(
         model.cursor_details,
         model.pen_settings.size,
@@ -484,8 +500,8 @@ pub fn update(model: Model, msg: Msg) {
         |> result.values()
         |> effect.batch()
 
-      set_color(model.pen_settings.color)
-      set_size(model.pen_settings.size)
+      canvas_set_color(model.pen_settings.color)
+      canvas_set_size(model.pen_settings.size)
 
       #(Model(..model, history_pos:), messages)
     }
@@ -537,8 +553,8 @@ pub fn update(model: Model, msg: Msg) {
             |> result.values()
             |> effect.batch()
 
-          set_color(model.pen_settings.color)
-          set_size(model.pen_settings.size)
+          canvas_set_color(model.pen_settings.color)
+          canvas_set_size(model.pen_settings.size)
 
           #(Model(..model, history_pos:), messages)
         }
@@ -552,17 +568,28 @@ pub fn update(model: Model, msg: Msg) {
         model.colors |> array.get(index) |> result.unwrap(default_color)
       update_color(model, color)
     }
+    SizeLower -> {
+      let new_size =
+        case model.pen_settings.size {
+          s if s == pen_size_2 -> pen_size_1
+          s if s == pen_size_3 -> pen_size_2
+          s if s == pen_size_4 -> pen_size_3
+          size -> size
+        }
+      update_size(model, new_size)
+    }
+    SizeIncrease -> {
+      let new_size =
+        case model.pen_settings.size {
+          s if s == pen_size_1 -> pen_size_2
+          s if s == pen_size_2 -> pen_size_3
+          s if s == pen_size_3 -> pen_size_4
+          size -> size
+        }
+      update_size(model, new_size)
+    }
     SetSize(size) -> {
-      set_size(size)
-      set_cursor(model.cursor_details, size, model.pen_settings.color)
-      #(
-        Model(
-          ..model,
-          pen_settings: PenSettings(..model.pen_settings, size:),
-          history: [Size(size), ..model.history],
-        ),
-        effect.none(),
-      )
+      update_size(model, size)
     }
     ChatMessage(chat_msg) -> {
       let #(chat, effect) = chat.update(model.party.chat, chat_msg, model.ws)
@@ -604,8 +631,21 @@ pub fn update(model: Model, msg: Msg) {
   }
 }
 
+fn update_size(model: Model, size: Int) -> #(Model, effect.Effect(Msg)) {
+  canvas_set_size(size)
+  set_cursor(model.cursor_details, size, model.pen_settings.color)
+  #(
+    Model(
+      ..model,
+      pen_settings: PenSettings(..model.pen_settings, size:),
+      history: [Size(size), ..model.history],
+    ),
+    effect.none(),
+  )
+}
+
 fn update_color(model: Model, color: String) -> #(Model, effect.Effect(Msg)) {
-  set_color(color)
+  canvas_set_color(color)
   set_cursor(model.cursor_details, model.pen_settings.size, color)
   #(
     Model(
@@ -677,11 +717,11 @@ fn follow_history(history: List(HistoryItem)) -> Nil {
       follow_history(rest)
     }
     [Color(color), ..rest] -> {
-      set_color(color)
+      canvas_set_color(color)
       follow_history(rest)
     }
     [Size(size), ..rest] -> {
-      set_size(size)
+      canvas_set_size(size)
       follow_history(rest)
     }
   }
@@ -703,10 +743,10 @@ fn clear() -> Nil
 fn clear_alternate_canvas(name: String) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "set_color")
-fn set_color(color: String) -> Nil
+fn canvas_set_color(color: String) -> Nil
 
 @external(javascript, "./drawing.ffi.mjs", "set_size")
-fn set_size(size: Int) -> Nil
+fn canvas_set_size(size: Int) -> Nil
 
 pub type CursorDetails
 
@@ -977,7 +1017,7 @@ fn view_drawing_ui(
     |> array.to_list()
 
   let size_buttons =
-    [6, 12, 36, 128]
+    pen_sizes
     |> list.index_map(fn(size, i) {
       let outline = case size == pen_settings.size {
         True -> "bg-slate-600"
