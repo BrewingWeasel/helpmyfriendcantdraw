@@ -185,57 +185,59 @@ pub fn view(model: Model) -> Element(Msg) {
         html.div([attribute.class("grow p-5 bg-slate-100 rounded-xl")], [
           html.h2([attribute.class("text-3xl")], [html.text("Settings")]),
           html.div([attribute.class("flex flex-col gap-2 items-center")], [
-            one_of_options(
-              [party.Horizontal, party.Vertical, party.Horizontal],
-              "layout:",
-              fn(layout) {
-                case layout {
-                  party.Horizontal -> element.text("Horizontal")
-                  party.Vertical -> element.text("Vertical")
-                }
-              },
-              info.drawings_layout,
-              SetLayout,
-            ),
-            one_of_options(
-              [30, 50, 80, 0, 30],
-              "overlap:",
-              fn(overlap) {
-                case overlap {
-                  30 -> element.text("Small")
-                  50 -> element.text("Medium")
-                  80 -> element.text("Large")
-                  0 -> element.text("None")
-                  _ -> element.text("Custom")
-                }
-              },
-              info.overlap,
-              SetOverlap,
-            ),
-            one_of_options(
-              [
-                option.None,
-                option.Some(5 * 60),
-                option.Some(3 * 60),
-                option.Some(60),
-                option.Some(30),
-                option.None,
-              ],
-              "timer:",
-              fn(timer) {
-                case timer {
-                  option.None -> element.text("No timer")
-                  option.Some(300) -> element.text("5:00")
-                  option.Some(180) -> element.text("3:00")
-                  option.Some(60) -> element.text("1:00")
-                  option.Some(30) -> element.text("0:30")
-                  option.Some(secs) ->
-                    element.text(int.to_string(secs) <> " seconds")
-                }
-              },
-              info.duration,
-              SetDuration,
-            ),
+            html.table([], [
+              one_of_options(
+                [party.Horizontal, party.Vertical, party.Horizontal],
+                "layout:",
+                fn(layout) {
+                  case layout {
+                    party.Horizontal -> element.text("Horizontal")
+                    party.Vertical -> element.text("Vertical")
+                  }
+                },
+                info.drawings_layout,
+                SetLayout,
+              ),
+              one_of_options(
+                [30, 50, 80, 0, 30],
+                "overlap:",
+                fn(overlap) {
+                  case overlap {
+                    30 -> element.text("Small")
+                    50 -> element.text("Medium")
+                    80 -> element.text("Large")
+                    0 -> element.text("None")
+                    _ -> element.text("Custom")
+                  }
+                },
+                info.overlap,
+                SetOverlap,
+              ),
+              one_of_options(
+                [
+                  option.None,
+                  option.Some(5 * 60),
+                  option.Some(3 * 60),
+                  option.Some(60),
+                  option.Some(30),
+                  option.None,
+                ],
+                "timer:",
+                fn(timer) {
+                  case timer {
+                    option.None -> element.text("No timer")
+                    option.Some(300) -> element.text("5:00")
+                    option.Some(180) -> element.text("3:00")
+                    option.Some(60) -> element.text("1:00")
+                    option.Some(30) -> element.text("0:30")
+                    option.Some(secs) ->
+                      element.text(int.to_string(secs) <> " seconds")
+                  }
+                },
+                info.duration,
+                SetDuration,
+              ),
+            ]),
             html.button(
               [
                 attribute.class(
@@ -329,16 +331,32 @@ fn one_of_options(looped_options, description, viewer, current, msg) {
     |> list.window_by_2()
     |> list.find_map(get_pair)
 
-  html.div([attribute.class("flex gap-12")], [
-    html.h2([attribute.class("text-2xl mx-4")], [html.text(description)]),
-    html.div([], [
-      html.button([attribute.class("mx-1"), event.on_click(msg(previous))], [
-        element.text("<"),
-      ]),
-      viewer(current),
-      html.button([attribute.class("mx-1"), event.on_click(msg(next))], [
-        element.text(">"),
-      ]),
+  html.tr([attribute.class("align-middle")], [
+    html.td([attribute.class("px-8")], [
+      html.h2([attribute.class("text-2xl mx-4")], [html.text(description)]),
+    ]),
+    html.td([], [
+      html.button(
+        [
+          attribute.class(
+            "mx-1 text-5xl hover:scale-120 cursor-pointer duration-150 ease-in-out",
+          ),
+          event.on_click(msg(previous)),
+        ],
+        [element.text("<")],
+      ),
+    ]),
+    html.td([attribute.class("text-center w-36")], [viewer(current)]),
+    html.td([], [
+      html.button(
+        [
+          attribute.class(
+            "mx-1 text-5xl hover:scale-120 cursor-pointer duration-150 ease-in-out",
+          ),
+          event.on_click(msg(next)),
+        ],
+        [element.text(">")],
+      ),
     ]),
   ])
 }
