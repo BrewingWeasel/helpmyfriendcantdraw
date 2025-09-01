@@ -75,7 +75,7 @@ pub fn view(chat: Chat, personal_id: Int) {
       html.li([], [message_elements])
     })
   html.div(
-    [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit max-h-1/3")],
+    [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit")],
     [
       html.h2([attribute.class("text-3xl")], [html.text("Chat")]),
       html.ul(
@@ -89,7 +89,7 @@ pub fn view(chat: Chat, personal_id: Int) {
         ]),
       ),
       html.form([event.on_submit(fn(_) { SendChatMessage })], [
-        html.div([attribute.class("flex gap-2 rounded-xl")], [
+        html.div([attribute.class("flex bg-white gap-2 rounded-xl")], [
           html.input([
             attribute.class("w-full text-2xl"),
             attribute.placeholder("Type a message..."),
