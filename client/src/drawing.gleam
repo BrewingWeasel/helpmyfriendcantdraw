@@ -272,8 +272,8 @@ fn server_update(main_model: Model, message) {
     messages.ChatMessage(message) -> {
       use party, _ws <- find_shared_party()
 
-      let chat = chat.handle_chat_message(party.chat, message)
-      #(SharedParty(..party, chat:), effect.none())
+      let #(chat, effect) = chat.handle_chat_message(party.chat, message)
+      #(SharedParty(..party, chat:), effect)
     }
     messages.DrawingInit(top:, left:, bottom:, right:, server_start_timestamp:) -> {
       let init_drawing = fn(model, top, left, bottom, right) {

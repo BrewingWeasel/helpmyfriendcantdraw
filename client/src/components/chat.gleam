@@ -37,42 +37,56 @@ pub fn update(model: Chat, msg: Msg, ws) -> #(Chat, Effect(Msg)) {
   }
 }
 
-pub fn handle_chat_message(chat: Chat, new_message: party.ChatMessage) -> Chat {
-  Chat(..chat, messages: [new_message, ..chat.messages])
+const chat_bottom_id = "chat-bottom"
+
+pub fn handle_chat_message(
+  chat: Chat,
+  new_message: party.ChatMessage,
+) -> #(Chat, effect.Effect(a)) {
+  #(
+    Chat(..chat, messages: [new_message, ..chat.messages]),
+    effect.after_paint(fn(_dispatch, _root) { scroll_into_view(chat_bottom_id) }),
+  )
 }
 
+@external(javascript, "./chat.ffi.mjs", "scroll_into_view")
+fn scroll_into_view(id: String) -> Nil
+
 pub fn view(chat: Chat, personal_id: Int) {
+  let messages =
+    chat.messages
+    |> list.map(fn(message) {
+      let message_elements = case message {
+        party.User(id:, name:, message:) -> {
+          let #(color, symbol) = names.get_styling_by_id(id, personal_id)
+          html.span([attribute.class("flex gap-1 items-center")], [
+            html.span(
+              [attribute.class("font-bold flex gap-1 items-center " <> color)],
+              [element.text(name), symbol, element.text(": ")],
+            ),
+            element.text(message),
+          ])
+        }
+        party.Server(message:) ->
+          html.span([attribute.class("text-gray-500 italic")], [
+            element.text(message),
+          ])
+      }
+      html.li([], [message_elements])
+    })
   html.div(
     [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit max-h-1/3")],
     [
       html.h2([attribute.class("text-3xl")], [html.text("Chat")]),
       html.ul(
         [attribute.class("list-none text-xl overflow-y-auto h-96")],
-        chat.messages
-          |> list.reverse()
-          |> list.map(fn(message) {
-            let message_elements = case message {
-              party.User(id:, name:, message:) -> {
-                let #(color, symbol) = names.get_styling_by_id(id, personal_id)
-                html.span([attribute.class("flex gap-1 items-center")], [
-                  html.span(
-                    [
-                      attribute.class(
-                        "font-bold flex gap-1 items-center " <> color,
-                      ),
-                    ],
-                    [element.text(name), symbol, element.text(": ")],
-                  ),
-                  element.text(message),
-                ])
-              }
-              party.Server(message:) ->
-                html.span([attribute.class("text-gray-500 italic")], [
-                  element.text(message),
-                ])
-            }
-            html.li([], [message_elements])
-          }),
+        list.reverse([
+          html.span(
+            [attribute.id(chat_bottom_id), attribute.class("h-[1px]")],
+            [],
+          ),
+          ..messages
+        ]),
       ),
       html.form([event.on_submit(fn(_) { SendChatMessage })], [
         html.div([attribute.class("flex gap-2 rounded-xl")], [
