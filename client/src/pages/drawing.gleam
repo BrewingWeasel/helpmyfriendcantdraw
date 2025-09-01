@@ -632,7 +632,20 @@ pub fn update(model: Model, msg: Msg) {
   }
 }
 
+fn handle_potential_drawing_interruption(model: Model, handler) {
+  case model.is_drawing {
+    True -> {
+      let #(model, stop_effect) = stop_drawing(model)
+      let #(model, handler_effect) = handler(model)
+      let #(model, drawing_effect) = enable_drawing(model)
+      #(model, effect.batch([stop_effect, handler_effect, drawing_effect]))
+    }
+    False -> handler(model)
+  }
+}
+
 fn update_size(model: Model, size: Int) -> #(Model, effect.Effect(Msg)) {
+  use model <- handle_potential_drawing_interruption(model)
   canvas_set_size(size)
   set_cursor(model.cursor_details, size, model.pen_settings.color)
   #(
@@ -646,6 +659,7 @@ fn update_size(model: Model, size: Int) -> #(Model, effect.Effect(Msg)) {
 }
 
 fn update_color(model: Model, color: String) -> #(Model, effect.Effect(Msg)) {
+  use model <- handle_potential_drawing_interruption(model)
   canvas_set_color(color)
   set_cursor(model.cursor_details, model.pen_settings.size, color)
   #(
@@ -664,6 +678,11 @@ fn start_drawing(
   y y: Int,
 ) -> #(Model, effect.Effect(Msg)) {
   draw_point(x, y)
+  let #(model, effect) = enable_drawing(model)
+  #(Model(..model, history: [Point(x, y), ..model.history]), effect)
+}
+
+fn enable_drawing(model: Model) {
   let new_history = case model.history_pos {
     0 -> model.history
     _ -> take_history(model.history, model.history_pos + 1)
@@ -673,7 +692,6 @@ fn start_drawing(
       ..model,
       is_drawing: True,
       history: [
-        Point(x, y),
         Size(model.pen_settings.size),
         Color(model.pen_settings.color),
         ..new_history
