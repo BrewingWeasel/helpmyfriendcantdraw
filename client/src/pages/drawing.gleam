@@ -81,6 +81,7 @@ pub type Model {
     history: List(HistoryItem),
     pen_settings: PenSettings,
     history_pos: Int,
+    max_history_pos: Int,
     ws: option.Option(ws.WebSocket),
     canvas_details: CanvasDetails,
     party: party.SharedParty,
@@ -122,6 +123,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
       is_drawing: False,
       pen_settings: PenSettings(color: default_color, size: default_size),
       history_pos: 0,
+      max_history_pos: 0,
       ws: Some(init.ws),
       canvas_details: CanvasDetails(
         top: False,
@@ -677,6 +679,7 @@ fn start_drawing(
         ..new_history
       ],
       history_pos: 0,
+      max_history_pos: model.max_history_pos - model.history_pos,
     ),
     effect.none(),
   )
@@ -917,7 +920,7 @@ ctx =
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
         html.div([], [
           timer,
-          view_drawing_ui(model.colors, model.pen_settings),
+          view_drawing_ui(model),
           canvas,
           html.div([], [
             html.button(
@@ -993,14 +996,11 @@ fn view_vertical_canvas_edge(exists, edge, main_class, model: Model) {
   }
 }
 
-fn view_drawing_ui(
-  colors: array.Array(String),
-  pen_settings: PenSettings,
-) -> Element(Msg) {
+fn view_drawing_ui(model: Model) -> Element(Msg) {
   let color_buttons =
-    colors
+    model.colors
     |> array.map(fn(color) {
-      let outline = case color == pen_settings.color {
+      let outline = case color == model.pen_settings.color {
         True -> "border-2 border-slate-600"
         False -> "border border-slate-300"
       }
@@ -1018,7 +1018,7 @@ fn view_drawing_ui(
   let size_buttons =
     pen_sizes
     |> list.index_map(fn(size, i) {
-      let outline = case size == pen_settings.size {
+      let outline = case size == model.pen_settings.size {
         True -> "bg-slate-600"
         False -> "border border-slate-300"
       }
@@ -1034,6 +1034,36 @@ fn view_drawing_ui(
       )
     })
 
+  let undo_enabled = model.history_pos < model.max_history_pos
+  let undo_button =
+    html.button(
+      [
+        attribute.class(
+          "bg-slate-200 rounded-lg cursor-pointer disabled:cursor-not-allowed",
+        ),
+        event.on_click(BackHistory),
+        attribute.disabled(!undo_enabled),
+      ],
+      [icons.undo(undo_enabled)],
+    )
+
+  let redo_enabled = case model.history_pos {
+    0 -> False
+    _ -> True
+  }
+
+  let redo_button =
+    html.button(
+      [
+        attribute.class(
+          "bg-slate-200 rounded-lg cursor-pointer disabled:cursor-not-allowed",
+        ),
+        event.on_click(ForwardHistory),
+        attribute.disabled(!redo_enabled),
+      ],
+      [icons.redo(redo_enabled)],
+    )
+
   html.div([attribute.class("flex p-2")], [
     html.div(
       [
@@ -1046,22 +1076,7 @@ fn view_drawing_ui(
         [html.div([attribute.class("ml-6")], [])],
         size_buttons,
         [html.div([attribute.class("ml-6")], [])],
-        [
-          html.button(
-            [
-              attribute.class("bg-slate-200 rounded-lg"),
-              event.on_click(BackHistory),
-            ],
-            [icons.undo()],
-          ),
-          html.button(
-            [
-              attribute.class("bg-slate-200 rounded-lg"),
-              event.on_click(ForwardHistory),
-            ],
-            [icons.redo()],
-          ),
-        ],
+        [undo_button, redo_button],
       ]),
     ),
   ])
@@ -1159,6 +1174,7 @@ fn stop_drawing(model: Model) {
       is_drawing: False,
       personal_edges_history:,
       history: [PenUp, ..model.history] |> display_history(),
+      max_history_pos: model.max_history_pos + 1,
     ),
     effect.batch(messages),
   )

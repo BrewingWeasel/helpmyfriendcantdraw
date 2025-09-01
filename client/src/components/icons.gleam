@@ -4,8 +4,16 @@ import lustre/element/svg
 
 const icon_size = 36
 
+const enabled_color = "#000000"
+
+const disabled_color = "#7a7a7a"
+
 // https://www.svgrepo.com/svg/506349/undo-small
-pub fn undo() {
+pub fn undo(enabled) {
+  let stroke = case enabled {
+    True -> enabled_color
+    False -> disabled_color
+  }
   html.svg(
     [
       attribute("viewBox", "0 0 24 24"),
@@ -18,7 +26,7 @@ pub fn undo() {
         attribute("stroke-linejoin", "round"),
         attribute("stroke-linecap", "round"),
         attribute("stroke-width", "1.5"),
-        attribute("stroke", "#000000"),
+        attribute("stroke", stroke),
         attribute(
           "d",
           "M18 13C17.4904 11.9961 16.6247 11.1655 15.5334 10.6333C14.442 10.1011 13.1842 9.89624 11.9494 10.0495C9.93127 10.3 8.52468 11.6116 7 12.8186M7 10V13H10",
@@ -29,7 +37,11 @@ pub fn undo() {
 }
 
 // https://www.svgrepo.com/svg/506293/redo-small
-pub fn redo() {
+pub fn redo(enabled) {
+  let stroke = case enabled {
+    True -> enabled_color
+    False -> disabled_color
+  }
   html.svg(
     [
       attribute("viewBox", "0 0 24 24"),
@@ -42,7 +54,7 @@ pub fn redo() {
         attribute("stroke-linejoin", "round"),
         attribute("stroke-linecap", "round"),
         attribute("stroke-width", "1.5"),
-        attribute("stroke", "#000000"),
+        attribute("stroke", stroke),
         attribute(
           "d",
           "M6 13C6.50963 11.9961 7.37532 11.1655 8.46665 10.6333C9.55797 10.1011 10.8158 9.89624 12.0506 10.0495C14.0687 10.3 15.4753 11.6116 17 12.8186M17 10V13H14",
