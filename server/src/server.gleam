@@ -91,12 +91,6 @@ pub fn main() {
     process.sleep(1000)
     let parties_manager = process.named_subject(parties_manager_name)
     watcher.set_parties_manager_actor(watcher_actor, parties_manager)
-    timers.add_timer_on_loop(
-      timers_actor,
-      "inactive_parties",
-      duration.minutes(2),
-      fn() { parties.check_inactive_parties(parties_manager) },
-    )
   }
 
   case process.receive(initializer_subject, 2000) {

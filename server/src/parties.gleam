@@ -5,6 +5,7 @@ import gleam/list
 import gleam/otp/actor
 import gleam/result
 import gleam/string
+import gleam/time/duration
 import logging
 import party
 import settings
@@ -17,6 +18,7 @@ pub type Model {
     parties: Dict(String, party.PartyActor),
     settings: settings.SettingsSubject,
     timer: timers.TimersSubject,
+    subject: Subject(Message),
   )
 }
 
@@ -29,7 +31,7 @@ pub type Message {
   GetParty(code: String, reply_to: Subject(Result(party.PartyActor, Nil)))
   CloseParty(code: String)
   ControlAction(party: String)
-  CheckInactiveParties
+  CheckInactiveParties(reply_to: Subject(Bool))
 }
 
 const alphabet = [
@@ -56,7 +58,12 @@ pub fn start(
   timer: timers.TimersSubject,
   name: process.Name(Message),
 ) -> Result(actor.Started(Subject(Message)), actor.StartError) {
-  actor.new(Model(parties: dict.new(), settings:, timer:))
+  actor.new_with_initialiser(100, fn(subject) {
+    Ok(
+      actor.initialised(Model(parties: dict.new(), settings:, timer:, subject:))
+      |> actor.returning(subject),
+    )
+  })
   |> actor.on_message(handle_message)
   |> actor.named(name)
   |> actor.start()
@@ -85,8 +92,8 @@ pub fn control_action(manager: process.Subject(Message), party: String) -> Nil {
   actor.send(manager, ControlAction(party))
 }
 
-pub fn check_inactive_parties(manager: process.Subject(Message)) -> Nil {
-  actor.send(manager, CheckInactiveParties)
+pub fn check_inactive_parties(manager: process.Subject(Message)) -> Bool {
+  actor.call(manager, 2000, CheckInactiveParties(_))
 }
 
 fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) {
@@ -96,6 +103,17 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
       let party =
         party.create(name, party_code, conn, model.settings, model.timer)
       actor.send(reply_to, #(party_code, party))
+
+      case dict.is_empty(model.parties) {
+        True ->
+          timers.add_timer_on_loop(
+            model.timer,
+            "inactive_parties",
+            duration.minutes(2),
+            fn() { check_inactive_parties(model.subject) },
+          )
+        False -> Nil
+      }
 
       actor.continue(
         Model(..model, parties: model.parties |> dict.insert(party_code, party)),
@@ -110,12 +128,16 @@ fn handle_message(model: Model, message: Message) -> actor.Next(Model, Message) 
       logging.log(logging.Notice, "Closing party with code: " <> code)
       actor.continue(Model(..model, parties: dict.delete(model.parties, code)))
     }
-    CheckInactiveParties -> {
+    CheckInactiveParties(reply_to) -> {
       model.parties
       |> dict.values()
       |> list.each(fn(party) {
         actor.send(party.data, party.CheckForInactivity)
       })
+
+      let should_continue = !dict.is_empty(model.parties)
+      process.send(reply_to, should_continue)
+
       actor.continue(model)
     }
     ControlAction(party_code) -> {

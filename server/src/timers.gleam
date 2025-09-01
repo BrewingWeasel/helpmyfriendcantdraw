@@ -58,22 +58,26 @@ fn add_timer_again_after(
   timers: TimersSubject,
   id: String,
   duration: duration.Duration,
-  call_after: fn() -> Nil,
+  call_after: fn() -> Bool,
 ) {
-  call_after()
-  actor.send(
-    timers,
-    AddTimer(id, duration:, call_after: fn() {
-      add_timer_again_after(timers, id, duration, call_after)
-    }),
-  )
+  let should_continue = call_after()
+  case should_continue {
+    True ->
+      actor.send(
+        timers,
+        AddTimer(id, duration:, call_after: fn() {
+          add_timer_again_after(timers, id, duration, call_after)
+        }),
+      )
+    False -> Nil
+  }
 }
 
 pub fn add_timer_on_loop(
   timers: TimersSubject,
   id: String,
   duration: duration.Duration,
-  call_after: fn() -> Nil,
+  call_after: fn() -> Bool,
 ) -> Nil {
   actor.send(
     timers,
