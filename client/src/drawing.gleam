@@ -139,7 +139,7 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             party: party.KnownParty(results_model.party),
           )),
         ),
-        effect.none(),
+        chat.scroll_down(),
       )
     }
 
@@ -401,20 +401,22 @@ fn server_update(main_model: Model, message) {
     }
     messages.DrawingFinalized(history, x_size, y_size) -> {
       let assert DrawingPage(drawing_model) = main_model.page
+      let #(model, effect) =
+        results.init(
+          history,
+          x_size,
+          y_size,
+          drawing_model.ws,
+          drawing_model.party,
+        )
       #(
-        Model(
-          ..main_model,
-          page: ResultsPage(results.init(
-            history,
-            x_size,
-            y_size,
-            drawing_model.ws,
-            drawing_model.party,
-          )),
-        ),
-        effect.after_paint(fn(dispatch, _) {
-          dispatch(ResultsPageUpdate(results.ShowDrawing))
-        }),
+        Model(..main_model, page: ResultsPage(model)),
+        effect.batch([
+          effect.after_paint(fn(dispatch, _) {
+            dispatch(ResultsPageUpdate(results.ShowDrawing))
+          }),
+          effect |> effect.map(ResultsPageUpdate),
+        ]),
       )
     }
   }

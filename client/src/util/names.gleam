@@ -36,8 +36,8 @@ pub fn get_styling_by_id(id: Int, personal_id: Int) {
   }
 
   let icon_wrapper = fn(icon) {
-    html.span([attribute.class("flex items-center")], [
-      element.text("("),
+    html.span([attribute.class("whitespace-pre inline-flex items-center gap-[1px] select-none")], [
+      element.text(" ("),
       icon,
       element.text(")"),
     ])

@@ -81,7 +81,7 @@ pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
 
 const chat_bottom_id = "chat-bottom"
 
-fn scroll_down() {
+pub fn scroll_down() {
   effect.after_paint(fn(_dispatch, _root) { scroll_into_view(chat_bottom_id) })
 }
 
@@ -180,9 +180,9 @@ pub fn view(chat: Chat, personal_id: Int) {
       let message_elements = case message {
         party.User(id:, name:, message:) -> {
           let #(color, symbol) = names.get_styling_by_id(id, personal_id)
-          html.span([attribute.class("flex gap-1 items-center")], [
+          html.span([], [
             html.span(
-              [attribute.class("font-bold flex gap-1 items-center " <> color)],
+              [attribute.class("font-bold flex-inline gap-1 items-center " <> color)],
               [element.text(name), symbol, element.text(": ")],
             ),
             element.text(message),

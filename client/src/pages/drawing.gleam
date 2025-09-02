@@ -149,6 +149,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
     effect.batch([
       effect.after_paint(fn(dispatch, _) { dispatch(Reset) }),
       effect.from(fn(dispatch) { add_key_listener(keybinds_handler(dispatch)) }),
+      chat.scroll_down(),
     ]),
   )
 }

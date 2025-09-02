@@ -28,8 +28,8 @@ pub fn init(
   y_size: Int,
   ws: Option(ws.WebSocket),
   party: party.SharedParty,
-) -> Model {
-  Model(history, x_size, y_size, ws, party)
+) -> #(Model, effect.Effect(Msg)) {
+  #(Model(history, x_size, y_size, ws, party), chat.scroll_down())
 }
 
 pub type Msg {

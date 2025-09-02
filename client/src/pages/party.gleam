@@ -118,8 +118,7 @@ pub fn update(model: Model, msg: Msg) {
       }
     }
     ChatMessage(chat_msg) -> {
-      let assert Model(party: KnownParty(SharedParty(..) as party), ..) =
-        model
+      let assert Model(party: KnownParty(SharedParty(..) as party), ..) = model
       let #(party, effect) = chat.update(party, chat_msg, model.ws)
       #(
         Model(..model, party: KnownParty(party)),
@@ -170,10 +169,7 @@ pub fn view(model: Model) -> Element(Msg) {
           let #(id, player) = item
           let #(color, symbol) = names.get_styling_by_id(id, personal_id)
           html.li([attribute.class(color), ..removing_attributes(id)], [
-            html.span([attribute.class("flex gap-1 items-center")], [
-              element.text(player.name),
-              symbol,
-            ]),
+            html.span([], [element.text(player.name), symbol]),
           ])
         })
 

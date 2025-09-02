@@ -71,7 +71,7 @@ pub fn crown() {
   html.svg(
     [
       attribute("viewBox", "0 0 24 24"),
-      attribute.class("fill-current"),
+      attribute.class("fill-current inline"),
       attribute.width(text_icon_size),
       attribute.height(text_icon_size),
     ],
@@ -90,7 +90,7 @@ pub fn person() {
   html.svg(
     [
       attribute("viewBox", "0 0 24 24"),
-      attribute.class("fill-current"),
+      attribute.class("fill-current inline"),
       attribute.width(text_icon_size),
       attribute.height(text_icon_size),
     ],
