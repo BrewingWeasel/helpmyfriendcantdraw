@@ -59,10 +59,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(model, effect.none())
     }
     ChatMessage(chat_msg) -> {
-      let #(new_chat, chat_effect) =
-        chat.update(model.party.chat, chat_msg, model.ws)
+      let #(new_party, chat_effect) =
+        chat.update(model.party, chat_msg, model.ws)
       #(
-        Model(..model, party: party.SharedParty(..model.party, chat: new_chat)),
+        Model(..model, party: new_party),
         chat_effect |> effect.map(ChatMessage),
       )
     }

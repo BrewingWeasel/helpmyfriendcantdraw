@@ -118,11 +118,11 @@ pub fn update(model: Model, msg: Msg) {
       }
     }
     ChatMessage(chat_msg) -> {
-      let assert Model(party: KnownParty(SharedParty(chat:, ..) as party), ..) =
+      let assert Model(party: KnownParty(SharedParty(..) as party), ..) =
         model
-      let #(chat, effect) = chat.update(chat, chat_msg, model.ws)
+      let #(party, effect) = chat.update(party, chat_msg, model.ws)
       #(
-        Model(..model, party: KnownParty(SharedParty(..party, chat:))),
+        Model(..model, party: KnownParty(party)),
         effect |> effect.map(ChatMessage),
       )
     }

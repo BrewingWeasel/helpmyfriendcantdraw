@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import lustre/attribute
 import lustre/effect.{type Effect}
@@ -8,7 +9,7 @@ import lustre/element/html
 import lustre/event
 import lustre_websocket as ws
 import shared/messages
-import shared/party.{type Chat, Chat}
+import shared/party.{type Chat, type SharedParty, Chat, SharedParty}
 import util/names
 
 pub type Msg {
@@ -16,21 +17,20 @@ pub type Msg {
   SendChatMessage
 }
 
-pub fn update(model: Chat, msg: Msg, ws) -> #(Chat, Effect(Msg)) {
+pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
   case msg {
     UpdateChatMessage(message) -> #(
-      Chat(..model, current_chat_message: message),
+      SharedParty(
+        ..model,
+        chat: Chat(..model.chat, current_chat_message: message),
+      ),
       effect.none(),
     )
     SendChatMessage -> {
-      case ws, string.trim(model.current_chat_message) {
+      case ws, string.trim(model.chat.current_chat_message) {
         None, _ | _, "" -> #(model, effect.none())
         Some(ws), msg -> {
-          let message = messages.SendChatMessage(msg)
-          #(
-            Chat(..model, current_chat_message: ""),
-            ws.send(ws, message |> messages.encode_client_message()),
-          )
+          handle_message(model, ws, msg)
         }
       }
     }
@@ -39,14 +39,79 @@ pub fn update(model: Chat, msg: Msg, ws) -> #(Chat, Effect(Msg)) {
 
 const chat_bottom_id = "chat-bottom"
 
+fn scroll_down() {
+  effect.after_paint(fn(_dispatch, _root) { scroll_into_view(chat_bottom_id) })
+}
+
 pub fn handle_chat_message(
   chat: Chat,
   new_message: party.ChatMessage,
 ) -> #(Chat, effect.Effect(a)) {
-  #(
-    Chat(..chat, messages: [new_message, ..chat.messages]),
-    effect.after_paint(fn(_dispatch, _root) { scroll_into_view(chat_bottom_id) }),
-  )
+  #(Chat(..chat, messages: [new_message, ..chat.messages]), scroll_down())
+}
+
+fn handle_message(model, ws, message) {
+  let model =
+    SharedParty(..model, chat: Chat(..model.chat, current_chat_message: ""))
+
+  let default_send = fn() {
+    let message = messages.SendChatMessage(message)
+    #(model, ws.send(ws, message |> messages.encode_client_message()))
+  }
+
+  let update_chat = fn(chat_updater) {
+    #(SharedParty(..model, chat: chat_updater(model.chat)), scroll_down())
+  }
+
+  case message {
+    "/" <> command -> {
+      let #(command, _args) =
+        command |> string.split_once(" ") |> result.unwrap(#(command, ""))
+
+      case echo command {
+        "help" -> {
+          use chat <- update_chat()
+
+          let extra_commands = case model.id {
+            0 ->
+              ", /kick <user>, /lock, /unlock, /mute (<user>), /unmute (<user>)"
+            _ -> ""
+          }
+
+          Chat(..chat, messages: [
+            party.Server(
+              "Available commands: /code, /clear, /help" <> extra_commands,
+            ),
+            ..chat.messages
+          ])
+        }
+        "code" -> {
+          use chat <- update_chat()
+          Chat(..chat, messages: [
+            party.Server("The room code is " <> model.code <> "."),
+            ..chat.messages
+          ])
+        }
+        "clear" -> {
+          use chat <- update_chat()
+          Chat(..chat, messages: [])
+        }
+        "kick" | "lock" | "unlock" | "mute" | "unmute" -> default_send()
+        _ -> {
+          use chat <- update_chat
+          Chat(..chat, messages: [
+            party.Server(
+              "Unknown command: "
+              <> command
+              <> ". Type /help for a list of commands.",
+            ),
+            ..chat.messages
+          ])
+        }
+      }
+    }
+    _ -> default_send()
+  }
 }
 
 @external(javascript, "./chat.ffi.mjs", "scroll_into_view")
@@ -74,33 +139,30 @@ pub fn view(chat: Chat, personal_id: Int) {
       }
       html.li([], [message_elements])
     })
-  html.div(
-    [attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit")],
-    [
-      html.h2([attribute.class("text-3xl")], [html.text("Chat")]),
-      html.ul(
-        [attribute.class("list-none text-xl overflow-y-auto h-96")],
-        list.reverse([
-          html.span(
-            [attribute.id(chat_bottom_id), attribute.class("h-[1px]")],
-            [],
-          ),
-          ..messages
+  html.div([attribute.class("bg-slate-100 rounded-xl p-5 w-96 h-fit")], [
+    html.h2([attribute.class("text-3xl")], [html.text("Chat")]),
+    html.ul(
+      [attribute.class("list-none text-xl overflow-y-auto h-96")],
+      list.reverse([
+        html.span(
+          [attribute.id(chat_bottom_id), attribute.class("h-[1px]")],
+          [],
+        ),
+        ..messages
+      ]),
+    ),
+    html.form([event.on_submit(fn(_) { SendChatMessage })], [
+      html.div([attribute.class("flex bg-white gap-2 rounded-xl")], [
+        html.input([
+          attribute.class("w-full text-2xl"),
+          attribute.placeholder("Type a message..."),
+          attribute.value(chat.current_chat_message),
+          event.on_input(UpdateChatMessage),
         ]),
-      ),
-      html.form([event.on_submit(fn(_) { SendChatMessage })], [
-        html.div([attribute.class("flex bg-white gap-2 rounded-xl")], [
-          html.input([
-            attribute.class("w-full text-2xl"),
-            attribute.placeholder("Type a message..."),
-            attribute.value(chat.current_chat_message),
-            event.on_input(UpdateChatMessage),
-          ]),
-          html.button([attribute.class("text-2xl bg-gray-200 rounded-md p-1")], [
-            html.text("Send"),
-          ]),
+        html.button([attribute.class("text-2xl bg-gray-200 rounded-md p-1")], [
+          html.text("Send"),
         ]),
       ]),
-    ],
-  )
+    ]),
+  ])
 }

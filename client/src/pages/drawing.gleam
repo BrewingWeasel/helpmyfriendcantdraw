@@ -593,9 +593,9 @@ pub fn update(model: Model, msg: Msg) {
       update_size(model, size)
     }
     ChatMessage(chat_msg) -> {
-      let #(chat, effect) = chat.update(model.party.chat, chat_msg, model.ws)
+      let #(party, effect) = chat.update(model.party, chat_msg, model.ws)
       #(
-        Model(..model, party: party.SharedParty(..model.party, chat:)),
+        Model(..model, party:),
         effect |> effect.map(ChatMessage),
       )
     }
