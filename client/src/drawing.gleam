@@ -221,7 +221,7 @@ fn server_update(main_model: Model, message) {
         party.KnownParty(SharedParty(
           shared_party.new(model.name),
           code,
-          Chat([], ""),
+          Chat([], "", False),
           id: 0,
         ))
       #(
@@ -251,7 +251,7 @@ fn server_update(main_model: Model, message) {
         ) as model,
       ) = main_model.page
       let party =
-        party.KnownParty(SharedParty(party_info, code, Chat([], ""), id))
+        party.KnownParty(SharedParty(party_info, code, Chat([], "", False), id))
       #(
         Model(..main_model, page: PartyPage(party.Model(..model, party:))),
         effect.none(),

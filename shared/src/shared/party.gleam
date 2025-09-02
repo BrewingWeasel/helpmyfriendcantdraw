@@ -40,7 +40,7 @@ pub type SharedParty {
 }
 
 pub type Chat {
-  Chat(messages: List(ChatMessage), current_chat_message: String)
+  Chat(messages: List(ChatMessage), current_chat_message: String, just_pressed_tab: Bool)
 }
 
 pub type ChatMessage {

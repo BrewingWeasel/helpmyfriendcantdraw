@@ -1,3 +1,6 @@
+import gleam/bool
+import gleam/dict
+import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -15,6 +18,7 @@ import util/names
 pub type Msg {
   UpdateChatMessage(String)
   SendChatMessage
+  TryComplete
 }
 
 pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
@@ -22,10 +26,48 @@ pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
     UpdateChatMessage(message) -> #(
       SharedParty(
         ..model,
-        chat: Chat(..model.chat, current_chat_message: message),
+        chat: Chat(
+          ..model.chat,
+          current_chat_message: message,
+          just_pressed_tab: False,
+        ),
       ),
       effect.none(),
     )
+    TryComplete -> {
+      let model =
+        SharedParty(..model, chat: Chat(..model.chat, just_pressed_tab: True))
+      let assert [to_complete, ..rest] =
+        model.chat.current_chat_message |> string.split(" ") |> list.reverse()
+
+      use <- bool.lazy_guard(to_complete == "", fn() { #(model, effect.none()) })
+
+      let complete_with = case to_complete {
+        "/" <> _command -> [
+          "/code", "/clear", "/help", "/kick", "/lock", "/unlock", "/mute",
+          "/unmute",
+        ]
+        _name -> model.info.players |> dict.values |> list.map(fn(p) { p.name })
+      }
+
+      let completion = complete(to_complete, complete_with)
+
+      case completion {
+        Ok(completed) -> {
+          let new_message =
+            [completed, ..rest] |> list.reverse() |> string.join(" ")
+
+          #(
+            SharedParty(
+              ..model,
+              chat: Chat(..model.chat, current_chat_message: new_message),
+            ),
+            effect.none(),
+          )
+        }
+        Error(_) -> #(model, effect.none())
+      }
+    }
     SendChatMessage -> {
       case ws, string.trim(model.chat.current_chat_message) {
         None, _ | _, "" -> #(model, effect.none())
@@ -114,6 +156,20 @@ fn handle_message(model, ws, message) {
   }
 }
 
+fn complete(current: String, options: List(String)) {
+  let processed_current = string.lowercase(current)
+  let available_completions =
+    options
+    |> list.filter(fn(option) {
+      string.starts_with(string.lowercase(option), processed_current)
+    })
+
+  case available_completions {
+    [single] -> Ok(single)
+    _ -> Error(Nil)
+  }
+}
+
 @external(javascript, "./chat.ffi.mjs", "scroll_into_view")
 fn scroll_into_view(id: String) -> Nil
 
@@ -158,6 +214,22 @@ pub fn view(chat: Chat, personal_id: Int) {
           attribute.placeholder("Type a message..."),
           attribute.value(chat.current_chat_message),
           event.on_input(UpdateChatMessage),
+          event.advanced("keydown", {
+            use key <- decode.field("key", decode.string)
+
+            let pass_through = fn() {
+              decode.failure(
+                event.handler(TryComplete, False, False),
+                "ignore key",
+              )
+            }
+
+            case key, chat.just_pressed_tab {
+              "Tab", False ->
+                decode.success(event.handler(TryComplete, True, True))
+              _, _ -> pass_through()
+            }
+          }),
         ]),
         html.button([attribute.class("text-2xl bg-gray-200 rounded-md p-1")], [
           html.text("Send"),
