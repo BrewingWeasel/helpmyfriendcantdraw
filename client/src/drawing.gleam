@@ -15,6 +15,7 @@ import pages/drawing
 import pages/home
 import pages/party
 import pages/results
+import shared/list_changing
 import shared/messages
 import shared/party.{Chat, SharedParty} as shared_party
 
@@ -137,6 +138,7 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             owner: id == 0,
             ws: results_model.ws,
             party: party.KnownParty(results_model.party),
+            edit_list: None,
           )),
         ),
         chat.scroll_down(),
@@ -221,7 +223,15 @@ fn server_update(main_model: Model, message) {
         party.KnownParty(SharedParty(
           shared_party.new(model.name),
           code,
-          Chat([], "", False),
+          Chat(
+            [
+              shared_party.Server(
+                "Type /help to view commands available to you as room leader",
+              ),
+            ],
+            "",
+            False,
+          ),
           id: 0,
         ))
       #(
@@ -275,7 +285,14 @@ fn server_update(main_model: Model, message) {
       let #(chat, effect) = chat.handle_chat_message(party.chat, message)
       #(SharedParty(..party, chat:), effect)
     }
-    messages.DrawingInit(top:, left:, bottom:, right:, server_start_timestamp:) -> {
+    messages.DrawingInit(
+      top:,
+      left:,
+      bottom:,
+      right:,
+      server_start_timestamp:,
+      prompt:,
+    ) -> {
       let init_drawing = fn(model, top, left, bottom, right) {
         Model(
           ..main_model,
@@ -291,6 +308,7 @@ fn server_update(main_model: Model, message) {
                 height: model.canvas_details.height,
                 edge: model.canvas_details.edge,
               ),
+              prompt:,
             ),
           ),
         )
@@ -376,6 +394,37 @@ fn server_update(main_model: Model, message) {
       let new_party =
         SharedParty(..party, info: shared_party.Party(..party.info, duration:))
       #(new_party, effect.none())
+    }
+    messages.PromptSet(selected_prompt) -> {
+      use party, _ws <- find_shared_party()
+      let new_party =
+        SharedParty(
+          ..party,
+          info: shared_party.Party(..party.info, selected_prompt:),
+        )
+      #(new_party, effect.none())
+    }
+    messages.PromptListUpdated(selected_prompt, changes) -> {
+      use party, _ws <- find_shared_party()
+      #(
+        SharedParty(
+          ..party,
+          info: shared_party.Party(
+            ..party.info,
+            prompt_options: dict.upsert(
+              party.info.prompt_options,
+              selected_prompt,
+              fn(options) {
+                list_changing.apply_batch_changes(
+                  options |> option.unwrap([]),
+                  changes,
+                )
+              },
+            ),
+          ),
+        ),
+        effect.none(),
+      )
     }
     messages.RequestDrawing -> {
       let assert DrawingPage(drawing_model) = main_model.page

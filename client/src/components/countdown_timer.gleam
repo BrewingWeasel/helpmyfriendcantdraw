@@ -98,7 +98,7 @@ fn view(model: Model) -> Element(msg) {
   html.div(
     [
       attribute.style("font-family", "Caveat Brush"),
-      attribute.class("text-2xl"),
+      attribute.class("text-2xl w-4 mr-8"),
       ..attributes
     ],
     [element.text(minutes <> ":" <> seconds)],

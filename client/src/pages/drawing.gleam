@@ -89,6 +89,7 @@ pub type Model {
     cursor_details: CursorDetails,
     server_start_timestamp: Int,
     colors: array.Array(String),
+    prompt: option.Option(String),
   )
 }
 
@@ -143,6 +144,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
         "#ff0000", "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff",
         "#ff00ff", "#6495ed", "#ff1493", "#ffb6c1",
       ]),
+      prompt: None,
     )
   #(
     model,
@@ -595,10 +597,7 @@ pub fn update(model: Model, msg: Msg) {
     }
     ChatMessage(chat_msg) -> {
       let #(party, effect) = chat.update(model.party, chat_msg, model.ws)
-      #(
-        Model(..model, party:),
-        effect |> effect.map(ChatMessage),
-      )
+      #(Model(..model, party:), effect |> effect.map(ChatMessage))
     }
     EndDrawing -> {
       let assert Some(ws) = model.ws
@@ -917,6 +916,15 @@ pub fn view(model: Model) -> Element(Msg) {
     None -> element.none()
   }
 
+  let prompt = case model.prompt {
+    Some(prompt) ->
+      html.div([attribute.class("text-2xl text-center")], [
+        element.text("Prompt: "),
+        html.span([attribute.class("font-semibold text-[#9e61ff]")], [element.text(prompt)]),
+      ])
+    None -> element.none()
+  }
+
   html.div(
     [
       attribute.class(
@@ -938,20 +946,23 @@ ctx =
       html.div([attribute.class("flex w-full gap-8 px-8 items-center")], [
         chat.view(model.party.chat, model.party.id) |> element.map(ChatMessage),
         html.div([], [
-          timer,
           view_drawing_ui(model),
           canvas,
-          html.div([], [
-            html.button(
-              [
-                event.on_click(ToggleReady),
-                attribute.class(
-                  "p-1 mt-1 mr-2 text-2xl rounded-lg " <> ready_button_class,
-                ),
-              ],
-              [element.text(ready_button_text)],
-            ),
-            end_button,
+          html.div([attribute.class("flex gap-6 w-full items-center")], [
+            html.div([attribute.class("grow")], [
+              html.button(
+                [
+                  event.on_click(ToggleReady),
+                  attribute.class(
+                    "p-1 mt-1 mr-2 text-2xl rounded-lg " <> ready_button_class,
+                  ),
+                ],
+                [element.text(ready_button_text)],
+              ),
+              end_button,
+            ]),
+            prompt,
+            timer,
           ]),
         ]),
       ]),

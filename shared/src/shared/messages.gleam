@@ -1,7 +1,8 @@
-import gleam/option
 import gleam/dynamic/decode
 import gleam/json
+import gleam/option
 import shared/history
+import shared/list_changing
 import shared/party
 
 pub type PenSettings {
@@ -38,6 +39,8 @@ pub type ClientMessage {
   ToggleReady
   SetOverlap(overlap: Int)
   SetDuration(duration: option.Option(Int))
+  SetPrompt(prompt: option.Option(String))
+  UpdatePromptList(prompt: String, changes: List(list_changing.Msg))
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -85,11 +88,29 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     ToggleReady -> #(11, [])
     SetOverlap(overlap) -> #(12, [#("overlap", json.int(overlap))])
     SetDuration(duration) -> {
-      let attached_data = [#("duration", case duration {
-        option.Some(d) -> json.int(d)
-        option.None -> json.null()
-      })]
+      let attached_data = [
+        #("duration", case duration {
+          option.Some(d) -> json.int(d)
+          option.None -> json.null()
+        }),
+      ]
       #(13, attached_data)
+    }
+    SetPrompt(prompt) -> {
+      let attached_data = [
+        #("prompt", case prompt {
+          option.Some(p) -> json.string(p)
+          option.None -> json.null()
+        }),
+      ]
+      #(14, attached_data)
+    }
+    UpdatePromptList(prompt, changes) -> {
+      let attached_data = [
+        #("prompt", json.string(prompt)),
+        #("changes", json.array(changes, list_changing.encode_msg)),
+      ]
+      #(15, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -161,11 +182,20 @@ pub fn decode_client_message(
         decode.success(SetOverlap(overlap:))
       }
       13 -> {
-        use duration <- decode.field(
-          "duration",
-          decode.optional(decode.int),
-        )
+        use duration <- decode.field("duration", decode.optional(decode.int))
         decode.success(SetDuration(duration:))
+      }
+      14 -> {
+        use prompt <- decode.field("prompt", decode.optional(decode.string))
+        decode.success(SetPrompt(prompt:))
+      }
+      15 -> {
+        use prompt <- decode.field("prompt", decode.string)
+        use changes <- decode.field(
+          "changes",
+          decode.list(list_changing.decode_msg()),
+        )
+        decode.success(UpdatePromptList(prompt:, changes:))
       }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
@@ -180,7 +210,14 @@ pub type ServerMessage {
   UserLeft(id: Int)
   Disconnected(reason: String)
   ChatMessage(message: party.ChatMessage)
-  DrawingInit(top: Bool, left: Bool, right: Bool, bottom: Bool, server_start_timestamp: Int)
+  DrawingInit(
+    top: Bool,
+    left: Bool,
+    right: Bool,
+    bottom: Bool,
+    server_start_timestamp: Int,
+    prompt: option.Option(String),
+  )
   DrawingSent(
     history: List(history.HistoryItem),
     pen_settings: PenSettings,
@@ -193,6 +230,8 @@ pub type ServerMessage {
   DrawingFinalized(history: List(history.HistoryItem), x_size: Int, y_size: Int)
   OverlapSet(overlap: Int)
   DurationSet(duration: option.Option(Int))
+  PromptSet(prompt: option.Option(String))
+  PromptListUpdated(prompt_list: String, changes: List(list_changing.Msg))
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -211,13 +250,17 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     ChatMessage(message) -> #(5, [
       #("message", party.chat_message_to_json(message)),
     ])
-    DrawingInit(top, left, right, bottom, server_start_timestamp) -> {
+    DrawingInit(top, left, right, bottom, server_start_timestamp, prompt) -> {
       let attached_data = [
         #("top", json.bool(top)),
         #("left", json.bool(left)),
         #("right", json.bool(right)),
         #("bottom", json.bool(bottom)),
         #("server_start_timestamp", json.int(server_start_timestamp)),
+        #("prompt", case prompt {
+          option.Some(p) -> json.string(p)
+          option.None -> json.null()
+        }),
       ]
       #(6, attached_data)
     }
@@ -252,11 +295,29 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     }
     OverlapSet(overlap) -> #(13, [#("overlap", json.int(overlap))])
     DurationSet(duration) -> {
-      let attached_data = [#("duration", case duration {
-        option.Some(d) -> json.int(d)
-        option.None -> json.null()
-      })]
+      let attached_data = [
+        #("duration", case duration {
+          option.Some(d) -> json.int(d)
+          option.None -> json.null()
+        }),
+      ]
       #(14, attached_data)
+    }
+    PromptSet(prompt) -> {
+      let attached_data = [
+        #("prompt", case prompt {
+          option.Some(p) -> json.string(p)
+          option.None -> json.null()
+        }),
+      ]
+      #(15, attached_data)
+    }
+    PromptListUpdated(prompt_list, changes) -> {
+      let attached_data = [
+        #("prompt_list", json.string(prompt_list)),
+        #("changes", json.array(changes, list_changing.encode_msg)),
+      ]
+      #(16, attached_data)
     }
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
@@ -300,8 +361,19 @@ pub fn decode_server_message(
         use left <- decode.field("left", decode.bool)
         use right <- decode.field("right", decode.bool)
         use bottom <- decode.field("bottom", decode.bool)
-        use server_start_timestamp <- decode.field("server_start_timestamp", decode.int)
-        decode.success(DrawingInit(top:, left:, right:, bottom:, server_start_timestamp:))
+        use server_start_timestamp <- decode.field(
+          "server_start_timestamp",
+          decode.int,
+        )
+        use prompt <- decode.field("prompt", decode.optional(decode.string))
+        decode.success(DrawingInit(
+          top:,
+          left:,
+          right:,
+          bottom:,
+          server_start_timestamp:,
+          prompt:,
+        ))
       }
       7 -> {
         use history <- decode.field(
@@ -339,11 +411,20 @@ pub fn decode_server_message(
         decode.success(OverlapSet(overlap:))
       }
       14 -> {
-        use duration <- decode.field(
-          "duration",
-          decode.optional(decode.int),
-        )
+        use duration <- decode.field("duration", decode.optional(decode.int))
         decode.success(DurationSet(duration:))
+      }
+      15 -> {
+        use prompt <- decode.field("prompt", decode.optional(decode.string))
+        decode.success(PromptSet(prompt:))
+      }
+      16 -> {
+        use prompt_list <- decode.field("prompt_list", decode.string)
+        use changes <- decode.field(
+          "changes",
+          decode.list(list_changing.decode_msg()),
+        )
+        decode.success(PromptListUpdated(prompt_list:, changes:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }

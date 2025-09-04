@@ -8,12 +8,14 @@ import gleam/option
 import gleam/order
 import gleam/otp/actor
 import gleam/result
+import gleam/set
 import gleam/string
 import gleam/time/duration
 import gleam/time/timestamp
 import logging
 import settings
 import shared/history.{type Direction, Down, Left, Right, Up}
+import shared/list_changing
 import shared/messages
 import shared/party
 import timers
@@ -40,6 +42,7 @@ pub type Model {
     last_message_timestamp: timestamp.Timestamp,
     timer: timers.TimersSubject,
     subject: process.Subject(Message),
+    used_prompts: set.Set(String),
   )
 }
 
@@ -103,6 +106,7 @@ pub fn create(
           last_message_timestamp: timestamp.system_time(),
           timer:,
           subject:,
+          used_prompts: set.new(),
         ))
         |> actor.returning(subject),
       )
@@ -430,6 +434,38 @@ pub fn handle_message(
               ),
             )
 
+          let server_start_timestamp =
+            timestamp.system_time()
+            |> timestamp.to_unix_seconds()
+            |> float.round()
+
+          let #(prompt, used_prompts) = case model.party.selected_prompt {
+            option.Some(prompt_theme) -> {
+              let options =
+                model.party.prompt_options
+                |> dict.get(prompt_theme)
+                |> result.unwrap([])
+              let #(options, used_prompts) = case
+                options
+                |> list.filter(fn(prompt) {
+                  !set.contains(model.used_prompts, prompt)
+                })
+              {
+                [] -> #(options, set.new())
+                new_options -> #(new_options, model.used_prompts)
+              }
+
+              case list.sample(options, 1) {
+                [prompt] -> #(
+                  option.Some(prompt),
+                  set.insert(used_prompts, prompt),
+                )
+                _ -> #(option.None, used_prompts)
+              }
+            }
+            option.None -> #(option.None, model.used_prompts)
+          }
+
           directions
           |> dict.to_list()
           |> list.each(fn(item) {
@@ -444,9 +480,8 @@ pub fn handle_message(
                     left: dict.has_key(neighbors, Left),
                     right: dict.has_key(neighbors, Right),
                     bottom: dict.has_key(neighbors, Down),
-                    server_start_timestamp: timestamp.system_time()
-                      |> timestamp.to_unix_seconds()
-                      |> float.round(),
+                    server_start_timestamp:,
+                    prompt:,
                   ),
                 )
               Error(_) -> Nil
@@ -475,6 +510,7 @@ pub fn handle_message(
               full_drawing_x_size:,
               full_drawing_y_size:,
               full_drawing: [],
+              used_prompts:,
             ),
           )
         }
@@ -495,6 +531,33 @@ pub fn handle_message(
         messages.SetDuration(duration) -> {
           let party = party.Party(..model.party, duration:)
           send_to_all(model.connections, messages.DurationSet(duration))
+          actor.continue(Model(..model, party:))
+        }
+        messages.SetPrompt(selected_prompt) -> {
+          let party = party.Party(..model.party, selected_prompt:)
+          send_to_all(model.connections, messages.PromptSet(selected_prompt))
+          actor.continue(Model(..model, party:))
+        }
+        messages.UpdatePromptList(prompt, changes) -> {
+          let party =
+            party.Party(
+              ..model.party,
+              prompt_options: dict.upsert(
+                model.party.prompt_options,
+                prompt,
+                fn(options) {
+                  list_changing.apply_batch_changes(
+                    options |> option.unwrap([]),
+                    changes,
+                  )
+                },
+              ),
+            )
+          send_to_all_matching(
+            model.connections,
+            messages.PromptListUpdated(prompt, changes),
+            fn(conn_id) { conn_id != id },
+          )
           actor.continue(Model(..model, party:))
         }
         messages.EndDrawing(history) -> {
@@ -821,4 +884,16 @@ fn send_to_all(connections, msg) {
   connections
   |> dict.values()
   |> list.each(fn(connection) { process.send(connection, msg) })
+}
+
+fn send_to_all_matching(connections, msg, predicate) {
+  connections
+  |> dict.to_list()
+  |> list.each(fn(pair) {
+    let #(id, connection) = pair
+    case predicate(id) {
+      True -> process.send(connection, msg)
+      False -> Nil
+    }
+  })
 }

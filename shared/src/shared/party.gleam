@@ -11,6 +11,8 @@ pub type Party {
     drawings_layout: DrawingsLayout,
     overlap: Int,
     duration: option.Option(Int),
+    prompt_options: dict.Dict(String, List(String)),
+    selected_prompt: option.Option(String),
   )
 }
 
@@ -40,7 +42,11 @@ pub type SharedParty {
 }
 
 pub type Chat {
-  Chat(messages: List(ChatMessage), current_chat_message: String, just_pressed_tab: Bool)
+  Chat(
+    messages: List(ChatMessage),
+    current_chat_message: String,
+    just_pressed_tab: Bool,
+  )
 }
 
 pub type ChatMessage {
@@ -80,13 +86,29 @@ pub fn chat_message_decoder() -> decode.Decoder(ChatMessage) {
 }
 
 pub fn to_json(party: Party) -> json.Json {
-  let Party(players:, drawings_layout:, overlap:, duration:) = party
+  let Party(
+    players:,
+    drawings_layout:,
+    overlap:,
+    duration:,
+    prompt_options:,
+    selected_prompt:,
+  ) = party
+
   json.object([
     #("players", json.dict(players, int.to_string, player_to_json)),
     #("drawings_layout", drawings_layout_to_json(drawings_layout)),
     #("overlap", json.int(overlap)),
     #("duration", case duration {
       option.Some(d) -> json.int(d)
+      option.None -> json.null()
+    }),
+    #(
+      "prompt_options",
+      json.dict(prompt_options, fn(k) { k }, json.array(_, json.string)),
+    ),
+    #("selected_prompt", case selected_prompt {
+      option.Some(p) -> json.string(p)
       option.None -> json.null()
     }),
   ])
@@ -106,7 +128,22 @@ pub fn decoder() -> decode.Decoder(Party) {
   )
   use overlap <- decode.field("overlap", decode.int)
   use duration <- decode.field("duration", decode.optional(decode.int))
-  decode.success(Party(players:, drawings_layout:, overlap:, duration:))
+  use prompt_options <- decode.field(
+    "prompt_options",
+    decode.dict(decode.string, decode.list(decode.string)),
+  )
+  use selected_prompt <- decode.field(
+    "selected_prompt",
+    decode.optional(decode.string),
+  )
+  decode.success(Party(
+    players:,
+    drawings_layout:,
+    overlap:,
+    duration:,
+    prompt_options:,
+    selected_prompt:,
+  ))
 }
 
 pub type Player {
@@ -129,5 +166,23 @@ pub fn new(name: String) -> Party {
     drawings_layout: Horizontal,
     overlap: 30,
     duration: option.None,
+    prompt_options: dict.from_list([
+      #("animals", [
+        "Tiger", "Turtle", "Dog", "Frog", "Cat", "Eagle", "Lizard", "Lion",
+        "Sloth", "Mouse", "Chicken", "Parrot", "Turkey", "Worm", "Pig", "Monkey",
+        "Shark", "Bear", "Whale", "Giraffe", "Kangaroo", "Rabbit", "Squirrel",
+        "Camel", "Moose", "Snake", "Spider", "Lobster", "Cow", "Starfish",
+      ]),
+      #("places", [
+        "Airport", "Amusement park", "Aquarium", "Attic", "Bathroom", "Beach",
+        "Bedroom", "Bridge", "Bus stop", "Cafe", "Castle", "Cave", "Church",
+        "Circus", "Desert", "Farm", "Forest", "Garden", "Grocery store", "Gym",
+        "Hospital", "House", "Kitchen", "Library", "Mall", "Mountains",
+        "Movie theater", "Museum", "North Pole", "Ocean", "Office", "Park",
+        "Playground", "Restaurant", "School", "Skyscraper", "Stadium", "Street",
+        "Swimming pool", "Train station", "Zoo",
+      ]),
+    ]),
+    selected_prompt: option.None,
   )
 }

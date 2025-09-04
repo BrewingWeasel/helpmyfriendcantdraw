@@ -1,14 +1,18 @@
 import components/chat
+import components/editable_list
+import components/icons
 import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
 import lustre/attribute
 import lustre/effect
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
+import shared/list_changing
 import shared/messages
 import shared/party.{type SharedParty, SharedParty}
 import util/names
@@ -17,7 +21,13 @@ import lustre_websocket as ws
 
 // MODEL -----------------------------------------------------------------------
 pub type Model {
-  Model(name: String, ws: Option(ws.WebSocket), owner: Bool, party: PartyModel)
+  Model(
+    name: String,
+    ws: Option(ws.WebSocket),
+    owner: Bool,
+    party: PartyModel,
+    edit_list: Option(editable_list.Model),
+  )
 }
 
 pub type PartyModel {
@@ -45,7 +55,7 @@ pub fn init(
   }
 
   #(
-    Model(name:, ws: Some(ws), owner:, party:),
+    Model(name:, ws: Some(ws), owner:, party:, edit_list: None),
     initial_message
       |> messages.encode_client_message()
       |> ws.send(ws, _),
@@ -62,6 +72,9 @@ pub type Msg {
   SetDuration(Option(Int))
   Start
   CopyCode
+  SetSelectedPrompt(Option(String))
+  EditPrompt(String)
+  EditListMessage(editable_list.Msg)
 }
 
 @external(javascript, "./party.ffi.mjs", "write_to_clipboard")
@@ -137,7 +150,76 @@ pub fn update(model: Model, msg: Msg) {
       use party <- update_party_settings(messages.SetDuration(new_duration))
       party.Party(..party, duration: new_duration)
     }
+    SetSelectedPrompt(new_prompt) -> {
+      use party <- update_party_settings(messages.SetPrompt(new_prompt))
+      party.Party(..party, selected_prompt: new_prompt)
+    }
     Start -> panic as "shouldn't have to handle"
+    EditPrompt(prompt) -> {
+      let assert KnownParty(party:) = model.party
+      let options =
+        party.info.prompt_options |> dict.get(prompt) |> result.unwrap([])
+      let #(new_list, effect) = editable_list.init(options)
+      #(
+        Model(..model, edit_list: Some(new_list)),
+        effect |> effect.map(EditListMessage),
+      )
+    }
+    EditListMessage(editable_list.Close) -> {
+      case model.edit_list {
+        Some(edit_list) -> {
+          let model = Model(..model, edit_list: None)
+          case edit_list.changes {
+            [] -> #(model, effect.none())
+            _ -> {
+              case model.ws {
+                Some(ws) -> {
+                  let assert KnownParty(party:) = model.party
+                  let prompt = party.info.selected_prompt |> option.unwrap("")
+                  let party =
+                    SharedParty(
+                      ..party,
+                      info: party.Party(
+                        ..party.info,
+                        prompt_options: party.info.prompt_options
+                          |> dict.upsert(prompt, fn(original) {
+                            list_changing.apply_batch_changes(
+                              original |> option.unwrap([]),
+                              edit_list.changes,
+                            )
+                          }),
+                      ),
+                    )
+
+                  #(
+                    Model(..model, party: KnownParty(party)),
+                    ws.send(
+                      ws,
+                      messages.UpdatePromptList(prompt, edit_list.changes)
+                        |> messages.encode_client_message(),
+                    ),
+                  )
+                }
+                None -> #(model, effect.none())
+              }
+            }
+          }
+        }
+        None -> #(model, effect.none())
+      }
+    }
+    EditListMessage(edit_msg) -> {
+      case model.edit_list {
+        Some(edit_list) -> {
+          let #(new_list, effect) = editable_list.update(edit_list, edit_msg)
+          #(
+            Model(..model, edit_list: Some(new_list)),
+            effect |> effect.map(EditListMessage),
+          )
+        }
+        None -> #(model, effect.none())
+      }
+    }
   }
 }
 
@@ -233,6 +315,33 @@ pub fn view(model: Model) -> Element(Msg) {
                 info.duration,
                 SetDuration,
               ),
+              one_of_options(
+                [
+                  [option.None],
+                  info.prompt_options |> dict.keys() |> list.map(Some),
+                  [option.Some("custom"), option.None],
+                ]
+                  |> list.flatten(),
+                "prompt:",
+                fn(prompt) {
+                  case prompt {
+                    option.None -> element.text("free draw")
+                    option.Some(prompt) ->
+                      html.div([], [
+                        element.text(prompt),
+                        html.button(
+                          [
+                            attribute.class("ml-1 cursor-pointer"),
+                            event.on_click(EditPrompt(prompt)),
+                          ],
+                          [icons.edit()],
+                        ),
+                      ])
+                  }
+                },
+                info.selected_prompt,
+                SetSelectedPrompt,
+              ),
             ]),
             html.button(
               [
@@ -302,7 +411,14 @@ pub fn view(model: Model) -> Element(Msg) {
         ),
         attribute.style("font-family", "Caveat Brush"),
       ],
-      [party_view],
+      [
+        party_view,
+        case model.edit_list {
+          Some(edit_list) ->
+            editable_list.view(edit_list) |> element.map(EditListMessage)
+          None -> element.none()
+        },
+      ],
     ),
   ])
 }
