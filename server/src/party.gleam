@@ -17,6 +17,7 @@ import settings
 import shared/history.{type Direction, Down, Left, Right, Up}
 import shared/list_changing
 import shared/messages
+import shared/palette
 import shared/party
 import timers
 import ws
@@ -466,6 +467,11 @@ pub fn handle_message(
             option.None -> #(option.None, model.used_prompts)
           }
 
+          let palette =
+            settings.get_settings(model.settings).palettes
+            |> dict.get(model.party.palette)
+            |> result.unwrap(palette.default)
+
           directions
           |> dict.to_list()
           |> list.each(fn(item) {
@@ -482,6 +488,7 @@ pub fn handle_message(
                     bottom: dict.has_key(neighbors, Down),
                     server_start_timestamp:,
                     prompt:,
+                    palette:,
                   ),
                 )
               Error(_) -> Nil
@@ -531,6 +538,11 @@ pub fn handle_message(
         messages.SetDuration(duration) -> {
           let party = party.Party(..model.party, duration:)
           send_to_all(model.connections, messages.DurationSet(duration))
+          actor.continue(Model(..model, party:))
+        }
+        messages.SetPalette(palette) -> {
+          let party = party.Party(..model.party, palette:)
+          send_to_all(model.connections, messages.PaletteSet(palette))
           actor.continue(Model(..model, party:))
         }
         messages.SetPrompt(selected_prompt) -> {

@@ -4,6 +4,7 @@ import components/chat
 import components/countdown_timer
 import gleam/dict
 import gleam/io
+import gleam/javascript/array
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
@@ -17,6 +18,7 @@ import pages/party
 import pages/results
 import shared/list_changing
 import shared/messages
+import shared/palette
 import shared/party.{Chat, SharedParty} as shared_party
 
 import lustre_websocket as ws
@@ -139,9 +141,13 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             ws: results_model.ws,
             party: party.KnownParty(results_model.party),
             edit_list: None,
+            palettes: dict.new(),
           )),
         ),
-        chat.scroll_down(),
+        effect.batch([
+          party.get_palettes() |> effect.map(PartyPageUpdate),
+          chat.scroll_down(),
+        ]),
       )
     }
 
@@ -292,6 +298,7 @@ fn server_update(main_model: Model, message) {
       right:,
       server_start_timestamp:,
       prompt:,
+      palette:,
     ) -> {
       let init_drawing = fn(model, top, left, bottom, right) {
         Model(
@@ -309,6 +316,9 @@ fn server_update(main_model: Model, message) {
                 edge: model.canvas_details.edge,
               ),
               prompt:,
+              colors: array.from_list(palette.colors),
+              bg_color: palette.bg,
+              default_color: palette.fg,
             ),
           ),
         )
@@ -322,6 +332,7 @@ fn server_update(main_model: Model, message) {
               ws:,
               party:,
               server_start_timestamp:,
+              palette:,
             ))
 
           #(
@@ -395,6 +406,12 @@ fn server_update(main_model: Model, message) {
         SharedParty(..party, info: shared_party.Party(..party.info, duration:))
       #(new_party, effect.none())
     }
+    messages.PaletteSet(palette) -> {
+      use party, _ws <- find_shared_party()
+      let new_party =
+        SharedParty(..party, info: shared_party.Party(..party.info, palette:))
+      #(new_party, effect.none())
+    }
     messages.PromptSet(selected_prompt) -> {
       use party, _ws <- find_shared_party()
       let new_party =
@@ -457,6 +474,11 @@ fn server_update(main_model: Model, message) {
           y_size,
           drawing_model.ws,
           drawing_model.party,
+          palette.Palette(
+            fg: drawing_model.default_color,
+            bg: drawing_model.bg_color,
+            colors: array.to_list(drawing_model.colors),
+          ),
         )
       #(
         Model(..main_model, page: ResultsPage(model)),

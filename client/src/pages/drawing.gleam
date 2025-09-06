@@ -19,6 +19,7 @@ import shared/history.{
   type HistoryItem, Color, Down, Left, PenUp, Point, Right, Size, Up,
 }
 import shared/messages.{type PenSettings, PenSettings}
+import shared/palette
 import shared/party
 
 import lustre_websocket as ws
@@ -34,8 +35,6 @@ const pen_size_4 = 128
 const pen_sizes = [pen_size_1, pen_size_2, pen_size_3, pen_size_4]
 
 pub const default_size = pen_size_2
-
-pub const default_color = "#000000"
 
 // MODEL -----------------------------------------------------------------------
 
@@ -90,6 +89,8 @@ pub type Model {
     server_start_timestamp: Int,
     colors: array.Array(String),
     prompt: option.Option(String),
+    default_color: String,
+    bg_color: String,
   )
 }
 
@@ -98,10 +99,13 @@ pub type DrawingInit {
     ws: ws.WebSocket,
     party: party.SharedParty,
     server_start_timestamp: Int,
+    palette: palette.Palette,
   )
 }
 
 pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
+  let default_color = palette.default.fg
+
   let model =
     Model(
       history: [Color(default_color), Size(default_size)],
@@ -139,18 +143,16 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
       is_ready: False,
       cursor_details: setup_cursor_details(),
       server_start_timestamp: init.server_start_timestamp,
-      colors: array.from_list([
-        "#000000", "#ffffff", "#006400", "#bdb76b", "#00008b", "#48d1cc",
-        "#ff0000", "#ffa500", "#ffff00", "#00ff00", "#00fa9a", "#0000ff",
-        "#ff00ff", "#6495ed", "#ff1493", "#ffb6c1",
-      ]),
+      colors: array.from_list(init.palette.colors),
+      default_color:,
+      bg_color: init.palette.bg,
       prompt: None,
     )
   #(
     model,
     effect.batch([
       effect.after_paint(fn(dispatch, _) { dispatch(Reset) }),
-      effect.from(fn(dispatch) { add_key_listener(keybinds_handler(dispatch)) }),
+      effect.from(fn(dispatch) { add_key_listener(keybinds_handler(dispatch, init.palette)) }),
       chat.scroll_down(),
     ]),
   )
@@ -159,7 +161,7 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
 @external(javascript, "./drawing.ffi.mjs", "add_key_listener")
 fn add_key_listener(callback: fn(String, Bool, Bool) -> Nil) -> Nil
 
-fn keybinds_handler(dispatch) {
+fn keybinds_handler(dispatch, palette: palette.Palette) {
   fn(key, shift_key, meta_key) {
     case key {
       "u" -> dispatch(BackHistory)
@@ -170,6 +172,8 @@ fn keybinds_handler(dispatch) {
         let assert Ok(index) = int.parse(key)
         dispatch(SetColorIndex(index - 1))
       }
+      "e" -> dispatch(SetColor(palette.bg))
+      "m" -> dispatch(SetColor(palette.fg))
       "[" -> dispatch(SizeLower)
       "{" -> dispatch(SetSize(pen_size_1))
       "]" -> dispatch(SizeIncrease)
@@ -375,7 +379,7 @@ pub fn handle_history_change_sent(
   |> follow_history_for_other_canvas(
     canvas_name,
     [],
-    PenSettings(color: default_color, size: default_size),
+    PenSettings(color: model.default_color, size: default_size),
   )
 
   Model(..model, other_sides_history:)
@@ -575,7 +579,7 @@ pub fn update(model: Model, msg: Msg) {
     }
     SetColorIndex(index) -> {
       let color =
-        model.colors |> array.get(index) |> result.unwrap(default_color)
+        model.colors |> array.get(index) |> result.unwrap(model.default_color)
       update_color(model, color)
     }
     SizeLower -> {
@@ -856,6 +860,7 @@ pub fn view(model: Model) -> Element(Msg) {
     html.div([attribute.class("relative")], [
       html.canvas([
         attribute.class(main_class <> " z-0"),
+        attribute.style("background-color", model.bg_color),
         attribute.id("drawing-canvas"),
         attribute.width(model.canvas_details.width),
         attribute.height(model.canvas_details.height),

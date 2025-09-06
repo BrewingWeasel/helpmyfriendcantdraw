@@ -1,3 +1,4 @@
+import shared/palette
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/int
@@ -13,6 +14,7 @@ pub type Party {
     duration: option.Option(Int),
     prompt_options: dict.Dict(String, List(String)),
     selected_prompt: option.Option(String),
+    palette: String,
   )
 }
 
@@ -93,6 +95,7 @@ pub fn to_json(party: Party) -> json.Json {
     duration:,
     prompt_options:,
     selected_prompt:,
+    palette:,
   ) = party
 
   json.object([
@@ -111,6 +114,7 @@ pub fn to_json(party: Party) -> json.Json {
       option.Some(p) -> json.string(p)
       option.None -> json.null()
     }),
+    #("palette", json.string(palette)),
   ])
 }
 
@@ -136,6 +140,7 @@ pub fn decoder() -> decode.Decoder(Party) {
     "selected_prompt",
     decode.optional(decode.string),
   )
+  use palette <- decode.field("palette", decode.string)
   decode.success(Party(
     players:,
     drawings_layout:,
@@ -143,6 +148,7 @@ pub fn decoder() -> decode.Decoder(Party) {
     duration:,
     prompt_options:,
     selected_prompt:,
+    palette:,
   ))
 }
 
@@ -183,6 +189,7 @@ pub fn new(name: String) -> Party {
         "Swimming pool", "Train station", "Zoo",
       ]),
     ]),
+    palette: palette.default_name,
     selected_prompt: option.None,
   )
 }

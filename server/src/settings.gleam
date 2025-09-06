@@ -1,21 +1,28 @@
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/erlang/application
 import gleam/erlang/process.{type Subject}
 import gleam/function
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/otp/actor
 import gleam/otp/supervision
 import gleam/result
 import gleam/string
 import logging
+import shared/palette
 import simplifile
 
 pub type SettingsSubject =
   Subject(Message)
 
 pub type Settings {
-  Settings(max_party_size: Int, log_level: logging.LogLevel)
+  Settings(
+    max_party_size: Int,
+    log_level: logging.LogLevel,
+    palettes: dict.Dict(String, palette.Palette),
+  )
 }
 
 pub type Message {
@@ -65,6 +72,20 @@ fn get_setting(config, key, default, map_with) {
 fn read_settings() {
   let assert Ok(priv_dir) = application.priv_directory("server")
 
+  let palettes_file = priv_dir <> "/config/public/palettes.json"
+
+  let palettes =
+    palettes_file
+    |> simplifile.read()
+    |> result.replace_error(Nil)
+    |> result.then(fn(file) {
+      json.parse(file, decode.dict(decode.string, palette.decoder()))
+      |> result.replace_error(Nil)
+    })
+    |> result.lazy_unwrap(fn() {
+      dict.from_list([#(palette.default_name, palette.default)])
+    })
+
   let config_file = priv_dir <> "/config/settings"
 
   let config =
@@ -106,6 +127,7 @@ fn read_settings() {
       int.parse(value) |> result.replace_error("Expected an integer")
     }),
     log_level:,
+    palettes:,
   )
 }
 

@@ -29,13 +29,13 @@ pub type Init {
   )
 }
 
-pub fn supervised(main_process, static_directory, index_html) {
+pub fn supervised(main_process, priv_directory, index_html) {
   supervision.supervisor(fn() {
     let assert Ok(init_subject) as actor =
       actor.new(Nil)
       |> actor.on_message(fn(_state, init_details) {
         logging.log(Debug, "Init received")
-        start(static_directory, index_html, init_details)
+        start(priv_directory, index_html, init_details)
 
         actor.continue(Nil)
       })
@@ -47,7 +47,7 @@ pub fn supervised(main_process, static_directory, index_html) {
   })
 }
 
-fn start(static_directory, index_html, init_details: Init) {
+fn start(priv_directory, index_html, init_details: Init) {
   logging.log(Notice, "Starting http")
   let assert Ok(parties_manager) =
     parties.start(
@@ -66,7 +66,8 @@ fn start(static_directory, index_html, init_details: Init) {
     use <- wisp.rescue_crashes()
     use req <- wisp.handle_head(req)
 
-    use <- wisp.serve_static(req, under: "static", from: static_directory)
+    use <- wisp.serve_static(req, under: "static", from: priv_directory <> "/static")
+    use <- wisp.serve_static(req, under: "static", from: priv_directory <> "/config/public")
 
     case req.method {
       http.Get -> wisp.html_response(string_tree.from_string(index_html), 200)

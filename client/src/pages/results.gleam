@@ -1,3 +1,4 @@
+import shared/palette
 import components/chat
 import gleam/list
 import gleam/option.{type Option}
@@ -19,6 +20,7 @@ pub type Model {
     y_size: Int,
     ws: Option(ws.WebSocket),
     party: party.SharedParty,
+    palette: palette.Palette,
   )
 }
 
@@ -28,8 +30,9 @@ pub fn init(
   y_size: Int,
   ws: Option(ws.WebSocket),
   party: party.SharedParty,
+  palette: palette.Palette,
 ) -> #(Model, effect.Effect(Msg)) {
-  #(Model(history, x_size, y_size, ws, party), chat.scroll_down())
+  #(Model(history, x_size, y_size, ws, party, palette), chat.scroll_down())
 }
 
 pub type Msg {
@@ -45,14 +48,14 @@ const save_id = "save-button"
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
     ShowDrawing -> {
-      draw_background(canvas_id)
+      draw_background(canvas_id, model.palette.bg)
 
       model.history
       |> list.reverse()
       |> drawing.follow_history_for_other_canvas(
         canvas_id,
         [],
-        messages.PenSettings(drawing.default_color, drawing.default_size),
+        messages.PenSettings(model.palette.fg, drawing.default_size),
       )
 
       setup_download_button(canvas_id, save_id)
@@ -74,7 +77,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 fn setup_download_button(canvas_id: String, save_id: String) -> Nil
 
 @external(javascript, "./results.ffi.mjs", "draw_background")
-fn draw_background(canvas_id: String) -> Nil
+fn draw_background(canvas_id: String, color: String) -> Nil
 
 pub fn view(model: Model) {
   html.div([attribute.class("max-h-screen")], [

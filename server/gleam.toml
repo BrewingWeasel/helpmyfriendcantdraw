@@ -27,6 +27,7 @@ filespy = { git = "https://github.com/BrewingWeasel/gleam-filespy.git", ref = "h
 envoy = ">= 1.0.2 and < 2.0.0"
 gleam_time = ">= 1.4.0 and < 2.0.0"
 barnacle = { git = "https://github.com/Pevensie/barnacle.git", ref = "stable_otp" }
+gleam_json = ">= 3.0.2 and < 4.0.0"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"

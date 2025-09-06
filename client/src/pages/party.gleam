@@ -2,6 +2,7 @@ import components/chat
 import components/editable_list
 import components/icons
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -12,8 +13,10 @@ import lustre/effect
 import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
+import rsvp
 import shared/list_changing
 import shared/messages
+import shared/palette
 import shared/party.{type SharedParty, SharedParty}
 import util/names
 
@@ -27,6 +30,7 @@ pub type Model {
     owner: Bool,
     party: PartyModel,
     edit_list: Option(editable_list.Model),
+    palettes: dict.Dict(String, palette.Palette),
   )
 }
 
@@ -55,10 +59,30 @@ pub fn init(
   }
 
   #(
-    Model(name:, ws: Some(ws), owner:, party:, edit_list: None),
-    initial_message
-      |> messages.encode_client_message()
-      |> ws.send(ws, _),
+    Model(
+      name:,
+      ws: Some(ws),
+      owner:,
+      party:,
+      edit_list: None,
+      palettes: dict.new(),
+    ),
+    effect.batch([
+      get_palettes(),
+      initial_message
+        |> messages.encode_client_message()
+        |> ws.send(ws, _),
+    ]),
+  )
+}
+
+pub fn get_palettes() {
+  rsvp.get(
+    "/static/palettes.json",
+    rsvp.expect_json(
+      decode.dict(decode.string, palette.decoder()),
+      ReceivedPalettes,
+    ),
   )
 }
 
@@ -67,14 +91,16 @@ pub fn init(
 pub type Msg {
   RemovePlayer(id: Int)
   ChatMessage(chat.Msg)
-  SetLayout(party.DrawingsLayout)
-  SetOverlap(Int)
-  SetDuration(Option(Int))
+  SetLayout(fn() -> party.DrawingsLayout)
+  SetOverlap(fn() -> Int)
+  SetDuration(fn() -> Option(Int))
   Start
   CopyCode
-  SetSelectedPrompt(Option(String))
+  SetSelectedPrompt(fn() -> Option(String))
   EditPrompt(String)
   EditListMessage(editable_list.Msg)
+  SetPalette(fn() -> String)
+  ReceivedPalettes(Result(dict.Dict(String, palette.Palette), rsvp.Error))
 }
 
 @external(javascript, "./party.ffi.mjs", "write_to_clipboard")
@@ -139,20 +165,35 @@ pub fn update(model: Model, msg: Msg) {
       )
     }
     SetLayout(new_layout) -> {
-      use party <- update_party_settings(messages.SetLayout(new_layout))
-      party.Party(..party, drawings_layout: new_layout)
+      let layout = new_layout()
+      use party <- update_party_settings(messages.SetLayout(layout))
+      party.Party(..party, drawings_layout: layout)
     }
     SetOverlap(new_overlap) -> {
-      use party <- update_party_settings(messages.SetOverlap(new_overlap))
-      party.Party(..party, overlap: new_overlap)
+      let overlap = new_overlap()
+      use party <- update_party_settings(messages.SetOverlap(overlap))
+      party.Party(..party, overlap:)
     }
     SetDuration(new_duration) -> {
-      use party <- update_party_settings(messages.SetDuration(new_duration))
-      party.Party(..party, duration: new_duration)
+      let duration = new_duration()
+      use party <- update_party_settings(messages.SetDuration(duration))
+      party.Party(..party, duration:)
     }
     SetSelectedPrompt(new_prompt) -> {
-      use party <- update_party_settings(messages.SetPrompt(new_prompt))
-      party.Party(..party, selected_prompt: new_prompt)
+      let prompt = new_prompt()
+      use party <- update_party_settings(messages.SetPrompt(prompt))
+      party.Party(..party, selected_prompt: prompt)
+    }
+    SetPalette(new_palette) -> {
+      let palette = new_palette()
+      use party <- update_party_settings(messages.SetPalette(palette))
+      party.Party(..party, palette:)
+    }
+    ReceivedPalettes(result) -> {
+      case result {
+        Ok(palettes) -> #(Model(..model, palettes:), effect.none())
+        Error(_) -> #(model, effect.none())
+      }
     }
     Start -> panic as "shouldn't have to handle"
     EditPrompt(prompt) -> {
@@ -259,13 +300,48 @@ pub fn view(model: Model) -> Element(Msg) {
 
       let is_owner = personal_id == 0
 
+      let palette_settings = case dict.is_empty(model.palettes) {
+        False -> {
+          let options =
+            model.palettes
+            |> dict.keys()
+
+          one_of_options(
+            options,
+            "palette:",
+            fn(palette) {
+              let colors =
+                dict.get(model.palettes, palette)
+                |> result.map(fn(palette) { palette.colors })
+                |> result.unwrap([])
+              html.div(
+                [attribute.class("grid grid-flow-col grid-rows-2 gap-1")],
+                colors
+                  |> list.map(fn(color) {
+                    html.div(
+                      [
+                        attribute.class("w-3 h-3 rounded-full"),
+                        attribute.style("background-color", color),
+                      ],
+                      [],
+                    )
+                  }),
+              )
+            },
+            info.palette,
+            SetPalette,
+          )
+        }
+        True -> element.none()
+      }
+
       let settings =
         html.div([attribute.class("grow p-5 bg-slate-100 rounded-xl")], [
           html.h2([attribute.class("text-3xl")], [html.text("Settings")]),
           html.div([attribute.class("flex flex-col gap-2 items-center")], [
             html.table([], [
               one_of_options(
-                [party.Horizontal, party.Vertical, party.Horizontal],
+                [party.Horizontal, party.Vertical],
                 "layout:",
                 fn(layout) {
                   case layout {
@@ -277,7 +353,7 @@ pub fn view(model: Model) -> Element(Msg) {
                 SetLayout,
               ),
               one_of_options(
-                [30, 50, 80, 0, 30],
+                [30, 50, 80, 0],
                 "overlap:",
                 fn(overlap) {
                   case overlap {
@@ -298,7 +374,6 @@ pub fn view(model: Model) -> Element(Msg) {
                   option.Some(3 * 60),
                   option.Some(60),
                   option.Some(30),
-                  option.None,
                 ],
                 "timer:",
                 fn(timer) {
@@ -317,11 +392,10 @@ pub fn view(model: Model) -> Element(Msg) {
               ),
               one_of_options(
                 [
-                  [option.None],
-                  info.prompt_options |> dict.keys() |> list.map(Some),
-                  [option.Some("custom"), option.None],
-                ]
-                  |> list.flatten(),
+                  option.Some("custom"),
+                  option.None,
+                  ..{ info.prompt_options |> dict.keys() |> list.map(Some) }
+                ],
                 "prompt:",
                 fn(prompt) {
                   case prompt {
@@ -342,6 +416,7 @@ pub fn view(model: Model) -> Element(Msg) {
                 info.selected_prompt,
                 SetSelectedPrompt,
               ),
+              palette_settings,
             ]),
             html.button(
               [
@@ -423,7 +498,7 @@ pub fn view(model: Model) -> Element(Msg) {
   ])
 }
 
-fn one_of_options(looped_options, description, viewer, current, msg) {
+fn one_of_options(options, description, viewer, current, msg) {
   let get_pair = fn(pair) {
     let #(a, b) = pair
     case a == current {
@@ -432,16 +507,26 @@ fn one_of_options(looped_options, description, viewer, current, msg) {
     }
   }
 
-  let assert Ok(next) =
-    looped_options
+  let next = fn() {
+    options
     |> list.window_by_2()
     |> list.find_map(get_pair)
+    |> result.lazy_unwrap(fn() {
+      let assert Ok(first) = list.first(options)
+      first
+    })
+  }
 
-  let assert Ok(previous) =
-    looped_options
+  let previous = fn() {
+    options
     |> list.reverse()
     |> list.window_by_2()
     |> list.find_map(get_pair)
+    |> result.lazy_unwrap(fn() {
+      let assert Ok(last) = list.last(options)
+      last
+    })
+  }
 
   html.tr([attribute.class("align-middle")], [
     html.td([attribute.class("px-8")], [

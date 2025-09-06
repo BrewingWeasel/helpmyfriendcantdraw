@@ -1,5 +1,4 @@
 import gleam/list
-import gleam/string
 import lustre/attribute
 import lustre/effect.{type Effect}
 import lustre/element

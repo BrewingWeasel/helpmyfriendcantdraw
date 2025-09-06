@@ -3,6 +3,7 @@ import gleam/json
 import gleam/option
 import shared/history
 import shared/list_changing
+import shared/palette
 import shared/party
 
 pub type PenSettings {
@@ -41,6 +42,7 @@ pub type ClientMessage {
   SetDuration(duration: option.Option(Int))
   SetPrompt(prompt: option.Option(String))
   UpdatePromptList(prompt: String, changes: List(list_changing.Msg))
+  SetPalette(palette: String)
 }
 
 pub fn encode_client_message(msg: ClientMessage) -> String {
@@ -115,6 +117,7 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
       ]
       #(15, attached_data)
     }
+    SetPalette(palette) -> #(16, [#("palette", json.string(palette))])
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -200,6 +203,10 @@ pub fn decode_client_message(
         )
         decode.success(UpdatePromptList(prompt:, changes:))
       }
+      16 -> {
+        use palette <- decode.field("palette", decode.string)
+        decode.success(SetPalette(palette:))
+      }
       _ -> decode.failure(CreateParty(""), "no type found")
     }
   }
@@ -220,6 +227,7 @@ pub type ServerMessage {
     bottom: Bool,
     server_start_timestamp: Int,
     prompt: option.Option(String),
+    palette: palette.Palette,
   )
   DrawingSent(
     history: List(List(history.HistoryItem)),
@@ -235,6 +243,7 @@ pub type ServerMessage {
   DurationSet(duration: option.Option(Int))
   PromptSet(prompt: option.Option(String))
   PromptListUpdated(prompt_list: String, changes: List(list_changing.Msg))
+  PaletteSet(palette: String)
 }
 
 pub fn encode_server_message(msg: ServerMessage) -> String {
@@ -253,7 +262,15 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     ChatMessage(message) -> #(5, [
       #("message", party.chat_message_to_json(message)),
     ])
-    DrawingInit(top, left, right, bottom, server_start_timestamp, prompt) -> {
+    DrawingInit(
+      top,
+      left,
+      right,
+      bottom,
+      server_start_timestamp,
+      prompt,
+      palette,
+    ) -> {
       let attached_data = [
         #("top", json.bool(top)),
         #("left", json.bool(left)),
@@ -264,6 +281,7 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
           option.Some(p) -> json.string(p)
           option.None -> json.null()
         }),
+        #("palette", palette.to_json(palette)),
       ]
       #(6, attached_data)
     }
@@ -325,6 +343,7 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
       ]
       #(16, attached_data)
     }
+    PaletteSet(palette) -> #(17, [#("palette", json.string(palette))])
   }
   json.object([#("t", json.int(msg_type_number)), ..attached_data])
   |> json.to_string()
@@ -372,6 +391,7 @@ pub fn decode_server_message(
           decode.int,
         )
         use prompt <- decode.field("prompt", decode.optional(decode.string))
+        use palette <- decode.field("palette", palette.decoder())
         decode.success(DrawingInit(
           top:,
           left:,
@@ -379,6 +399,7 @@ pub fn decode_server_message(
           bottom:,
           server_start_timestamp:,
           prompt:,
+          palette:,
         ))
       }
       7 -> {
@@ -431,6 +452,10 @@ pub fn decode_server_message(
           decode.list(list_changing.decode_msg()),
         )
         decode.success(PromptListUpdated(prompt_list:, changes:))
+      }
+      17 -> {
+        use palette <- decode.field("palette", decode.string)
+        decode.success(PaletteSet(palette:))
       }
       _ -> decode.failure(PartyCreated(code: ""), "no type found")
     }

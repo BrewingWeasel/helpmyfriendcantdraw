@@ -52,7 +52,7 @@ pub fn main() {
     |> supervisor.add(timers.supervised(timers_name))
     |> supervisor.add(http.supervised(
       initializer_subject,
-      static_directory,
+      priv_directory,
       index_html,
     ))
     |> supervisor.start()

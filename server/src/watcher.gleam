@@ -85,7 +85,8 @@ fn start(watcher_name) -> Nil {
         filespy.Change(path:, events:) -> {
           let path_segments = string.split(path, "/") |> list.reverse()
           case path_segments {
-            ["settings", "config", ..] ->
+            ["settings", "config", ..]
+            | ["palettes.json", "public", "config", ..] ->
               case model.settings {
                 Some(settings) -> {
                   settings.update_settings(settings)
