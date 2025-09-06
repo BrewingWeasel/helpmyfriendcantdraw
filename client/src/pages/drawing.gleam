@@ -152,7 +152,9 @@ pub fn init(init: DrawingInit) -> #(Model, effect.Effect(Msg)) {
     model,
     effect.batch([
       effect.after_paint(fn(dispatch, _) { dispatch(Reset) }),
-      effect.from(fn(dispatch) { add_key_listener(keybinds_handler(dispatch, init.palette)) }),
+      effect.from(fn(dispatch) {
+        add_key_listener(keybinds_handler(dispatch, init.palette))
+      }),
       chat.scroll_down(),
     ]),
   )
@@ -168,10 +170,19 @@ fn keybinds_handler(dispatch, palette: palette.Palette) {
       "z" if meta_key && !shift_key -> dispatch(BackHistory)
       "r" -> dispatch(ForwardHistory)
       "z" if meta_key && shift_key -> dispatch(ForwardHistory)
+
       "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> {
         let assert Ok(index) = int.parse(key)
         dispatch(SetColorIndex(index - 1))
       }
+      "0" -> dispatch(SetColorIndex(9))
+      "!" -> dispatch(SetColorIndex(10))
+      "@" -> dispatch(SetColorIndex(11))
+      "#" -> dispatch(SetColorIndex(12))
+      "$" -> dispatch(SetColorIndex(13))
+      "%" -> dispatch(SetColorIndex(14))
+      "^" -> dispatch(SetColorIndex(14))
+
       "e" -> dispatch(SetColor(palette.bg))
       "m" -> dispatch(SetColor(palette.fg))
       "[" -> dispatch(SizeLower)
