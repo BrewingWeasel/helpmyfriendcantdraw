@@ -25,7 +25,7 @@ pub type ClientMessage {
   JoinParty(code: String, name: String)
   KickUser(id: Int)
   SendDrawing(
-    history: List(history.HistoryItem),
+    history: List(List(history.HistoryItem)),
     pen_settings: PenSettings,
     direction: history.Direction,
   )
@@ -55,7 +55,10 @@ pub fn encode_client_message(msg: ClientMessage) -> String {
     StartDrawing -> #(4, [])
     SendDrawing(history, pen_settings, direction) -> {
       let attached_data = [
-        #("history", json.array(history, history.history_item_to_json)),
+        #(
+          "history",
+          json.array(history, json.array(_, history.history_item_to_json)),
+        ),
         #("pen_settings", pen_settings_to_json(pen_settings)),
         #("direction", history.direction_to_json(direction)),
       ]
@@ -144,7 +147,7 @@ pub fn decode_client_message(
       5 -> {
         use history <- decode.field(
           "history",
-          decode.list(history.history_item_decoder()),
+          decode.list(decode.list(history.history_item_decoder())),
         )
         use pen_settings <- decode.field("pen_settings", pen_settings_decoder())
         use direction <- decode.field("direction", history.direction_decoder())
@@ -219,7 +222,7 @@ pub type ServerMessage {
     prompt: option.Option(String),
   )
   DrawingSent(
-    history: List(history.HistoryItem),
+    history: List(List(history.HistoryItem)),
     pen_settings: PenSettings,
     direction: history.Direction,
   )
@@ -266,7 +269,10 @@ pub fn encode_server_message(msg: ServerMessage) -> String {
     }
     DrawingSent(history, pen_settings, direction) -> {
       let attached_data = [
-        #("history", json.array(history, history.history_item_to_json)),
+        #(
+          "history",
+          json.array(history, json.array(_, history.history_item_to_json)),
+        ),
         #("pen_settings", pen_settings_to_json(pen_settings)),
         #("direction", history.direction_to_json(direction)),
       ]
@@ -378,7 +384,7 @@ pub fn decode_server_message(
       7 -> {
         use history <- decode.field(
           "history",
-          decode.list(history.history_item_decoder()),
+          decode.list(decode.list(history.history_item_decoder())),
         )
         use pen_settings <- decode.field("pen_settings", pen_settings_decoder())
         use direction <- decode.field("direction", history.direction_decoder())

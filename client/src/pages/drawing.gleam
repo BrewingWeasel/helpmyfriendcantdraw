@@ -210,10 +210,12 @@ fn draw_at_other_canvas(
 
 pub fn handle_drawing_sent(
   model: Model,
-  history: List(HistoryItem),
+  history: List(List(HistoryItem)),
   pen_settings: PenSettings,
   direction: history.Direction,
 ) -> Model {
+  let flattened_history = list.flatten(history)
+
   let #(canvas_name, updated_other_sides) = case direction {
     Up -> {
       let past_history = case model.other_sides_history.top_history_index {
@@ -225,7 +227,7 @@ pub fn handle_drawing_sent(
         "t",
         OtherSidesHistory(
           ..model.other_sides_history,
-          top: list.append([PenUp, ..history], [
+          top: list.append([PenUp, ..flattened_history], [
             Color(pen_settings.color),
             Size(pen_settings.size),
             ..past_history
@@ -244,7 +246,7 @@ pub fn handle_drawing_sent(
         "l",
         OtherSidesHistory(
           ..model.other_sides_history,
-          left: list.append([PenUp, ..history], [
+          left: list.append([PenUp, ..flattened_history], [
             Color(pen_settings.color),
             Size(pen_settings.size),
             ..past_history
@@ -263,7 +265,7 @@ pub fn handle_drawing_sent(
         "b",
         OtherSidesHistory(
           ..model.other_sides_history,
-          bottom: list.append([PenUp, ..history], [
+          bottom: list.append([PenUp, ..flattened_history], [
             Color(pen_settings.color),
             Size(pen_settings.size),
             ..past_history
@@ -282,7 +284,7 @@ pub fn handle_drawing_sent(
         "r",
         OtherSidesHistory(
           ..model.other_sides_history,
-          right: list.append([PenUp, ..history], [
+          right: list.append([PenUp, ..flattened_history], [
             Color(pen_settings.color),
             Size(pen_settings.size),
             ..past_history
@@ -292,18 +294,20 @@ pub fn handle_drawing_sent(
       )
     }
   }
-  draw_at_other_canvas(
-    canvas_name <> "-canvas",
-    pen_settings,
-    history
-      |> list.map(fn(item) {
-        case item {
-          Point(x, y) -> Ok(#(x, y))
-          _ -> Error(Nil)
-        }
-      })
-      |> result.values(),
-  )
+  list.each(history, fn(history_fragment) {
+    draw_at_other_canvas(
+      canvas_name <> "-canvas",
+      pen_settings,
+      history_fragment
+        |> list.map(fn(item) {
+          case item {
+            Point(x, y) -> Ok(#(x, y))
+            _ -> Error(Nil)
+          }
+        })
+        |> result.values(),
+    )
+  })
   Model(..model, other_sides_history: updated_other_sides)
 }
 
@@ -920,7 +924,9 @@ pub fn view(model: Model) -> Element(Msg) {
     Some(prompt) ->
       html.div([attribute.class("text-2xl text-center")], [
         element.text("Prompt: "),
-        html.span([attribute.class("font-semibold text-[#9e61ff]")], [element.text(prompt)]),
+        html.span([attribute.class("font-semibold text-[#9e61ff]")], [
+          element.text(prompt),
+        ]),
       ])
     None -> element.none()
   }
@@ -1132,42 +1138,78 @@ fn stop_drawing(model: Model) {
 
   let #(top, left, bottom, right) =
     recent_drawn
-    |> list.fold(#([], [], [], []), fn(acc, item) {
+    |> list.fold(#(#([], []), #([], []), #([], []), #([], [])), fn(acc, item) {
       case item {
         Point(x, y) -> {
+          let update = fn(items, item, currently_adding, meets_condition) {
+            case meets_condition, currently_adding {
+              True, currently_adding -> #(items, [item, ..currently_adding])
+              False, [] -> #(items, currently_adding)
+              False, _ -> #([currently_adding, ..items], [])
+            }
+          }
           let pen_edge = model.pen_settings.size / 2
-          let #(top, left, bottom, right) = acc
-          let top = case y {
-            y if y < model.canvas_details.edge + pen_edge -> [item, ..top]
-            _ -> top
-          }
-          let left = case x {
-            x if x < model.canvas_details.edge + pen_edge -> [item, ..left]
-            _ -> left
-          }
+          let #(
+            #(top, top_adding),
+            #(left, left_adding),
+            #(bottom, bottom_adding),
+            #(right, right_adding),
+          ) = acc
+          let #(top, top_adding) =
+            update(
+              top,
+              item,
+              top_adding,
+              y < model.canvas_details.edge + pen_edge,
+            )
+          let #(left, left_adding) =
+            update(
+              left,
+              item,
+              left_adding,
+              x < model.canvas_details.edge + pen_edge,
+            )
           let bottom_border =
             model.canvas_details.height - model.canvas_details.edge
-          let bottom = case y {
-            y if y > bottom_border - pen_edge -> [
+          let #(bottom, bottom_adding) =
+            update(
+              bottom,
               Point(x, y - bottom_border),
-              ..bottom
-            ]
-            _ -> bottom
-          }
+              bottom_adding,
+              y > bottom_border - pen_edge,
+            )
           let right_border =
             model.canvas_details.width - model.canvas_details.edge
-          let right = case x {
-            x if x > right_border - pen_edge -> [
+          let #(right, right_adding) =
+            update(
+              right,
               Point(x - right_border, y),
-              ..right
-            ]
-            _ -> right
-          }
-          #(top, left, bottom, right)
+              right_adding,
+              x > right_border - pen_edge,
+            )
+          #(
+            #(top, top_adding),
+            #(left, left_adding),
+            #(bottom, bottom_adding),
+            #(right, right_adding),
+          )
         }
         _ -> acc
       }
     })
+
+  let consolidate = fn(items) {
+    let #(acc, adding) = items
+    case adding {
+      [] -> acc
+      _ -> [adding, ..acc]
+    }
+  }
+
+  let top = consolidate(top)
+  let left = consolidate(left)
+  let bottom = consolidate(bottom)
+  let right = consolidate(right)
 
   let assert Some(ws) = model.ws
 
