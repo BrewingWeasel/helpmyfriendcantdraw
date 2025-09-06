@@ -170,8 +170,8 @@ pub fn new(name: String) -> Party {
   Party(
     players: dict.from_list([#(0, Player(name))]),
     drawings_layout: Horizontal,
-    overlap: 30,
-    duration: option.None,
+    overlap: 50,
+    duration: option.Some(60 * 3),
     prompt_options: dict.from_list([
       #("animals", [
         "Tiger", "Turtle", "Dog", "Frog", "Cat", "Eagle", "Lizard", "Lion",

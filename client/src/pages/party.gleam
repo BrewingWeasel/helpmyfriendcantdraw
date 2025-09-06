@@ -370,6 +370,7 @@ pub fn view(model: Model) -> Element(Msg) {
               one_of_options(
                 [
                   option.None,
+                  option.Some(10 * 60),
                   option.Some(5 * 60),
                   option.Some(3 * 60),
                   option.Some(60),
@@ -379,12 +380,14 @@ pub fn view(model: Model) -> Element(Msg) {
                 fn(timer) {
                   case timer {
                     option.None -> element.text("No timer")
-                    option.Some(300) -> element.text("5:00")
-                    option.Some(180) -> element.text("3:00")
-                    option.Some(60) -> element.text("1:00")
-                    option.Some(30) -> element.text("0:30")
-                    option.Some(secs) ->
-                      element.text(int.to_string(secs) <> " seconds")
+                    option.Some(secs) -> {
+                      let minutes = secs / 60
+                      let leftover_seconds =
+                        string.pad_start(int.to_string(secs % 60), 2, "0")
+                      element.text(
+                        int.to_string(minutes) <> ":" <> leftover_seconds,
+                      )
+                    }
                   }
                 },
                 info.duration,
