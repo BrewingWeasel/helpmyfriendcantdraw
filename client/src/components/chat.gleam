@@ -19,6 +19,7 @@ pub type Msg {
   UpdateChatMessage(String)
   SendChatMessage
   TryComplete
+  Empty
 }
 
 pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
@@ -76,6 +77,7 @@ pub fn update(model: SharedParty, msg: Msg, ws) -> #(SharedParty, Effect(Msg)) {
         }
       }
     }
+    Empty -> #(model, effect.none())
   }
 }
 
@@ -218,9 +220,8 @@ pub fn view(chat: Chat, personal_id: Int) {
             use key <- decode.field("key", decode.string)
 
             let pass_through = fn() {
-              decode.failure(
-                event.handler(TryComplete, False, False),
-                "ignore key",
+              decode.success(
+                event.handler(Empty, False, True),
               )
             }
 
