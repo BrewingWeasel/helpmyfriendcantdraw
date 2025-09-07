@@ -1,5 +1,6 @@
 // IMPORTS ---------------------------------------------------------------------
 
+import components/clickable
 import components/chat
 import components/countdown_timer
 import components/icons
@@ -914,15 +915,15 @@ pub fn view(model: Model) -> Element(Msg) {
     })
 
   let #(ready_button_class, ready_button_text) = case model.is_ready {
-    True -> #("bg-gray-200", "unready")
-    False -> #("bg-green-200", "ready")
+    True -> #("bg-gray-200 hover:bg-gray-200/90", "unready")
+    False -> #("bg-green-200 hover:bg-green-200/90", "ready")
   }
 
   let end_button = case model.party.id == 0 && model.is_ready {
     True ->
-      html.button(
+      clickable.button(
         [
-          attribute.class("p-1 mt-1 text-2xl bg-rose-200 rounded-lg"),
+          attribute.class("p-1 mt-1 text-2xl rounded-lg"),
           event.on_click(EndDrawing),
         ],
         [element.text("end early")],
@@ -940,7 +941,7 @@ pub fn view(model: Model) -> Element(Msg) {
     Some(prompt) ->
       html.div([attribute.class("text-2xl text-center")], [
         element.text("Prompt: "),
-        html.span([attribute.class("font-semibold text-[#9e61ff]")], [
+        html.span([attribute.class("font-semibold text-accent")], [
           element.text(prompt),
         ]),
       ])
@@ -972,11 +973,11 @@ ctx =
           canvas,
           html.div([attribute.class("flex gap-6 w-full items-center")], [
             html.div([attribute.class("grow")], [
-              html.button(
+              clickable.button(
                 [
                   event.on_click(ToggleReady),
                   attribute.class(
-                    "p-1 mt-1 mr-2 text-2xl rounded-lg " <> ready_button_class,
+                    "mt-1 mr-2 text-2xl " <> ready_button_class,
                   ),
                 ],
                 [element.text(ready_button_text)],
@@ -1058,7 +1059,7 @@ fn view_drawing_ui(model: Model) -> Element(Msg) {
       }
       html.button(
         [
-          attribute.class("w-6 h-6 rounded-full " <> outline),
+          attribute.class("w-6 h-6 rounded-full cursor-pointer " <> outline),
           attribute.style("background-color", color),
           event.on_click(SetColor(color)),
         ],
@@ -1077,7 +1078,7 @@ fn view_drawing_ui(model: Model) -> Element(Msg) {
       let icon_size = i * 4 + 9
       html.button(
         [
-          attribute.class("rounded-full " <> outline),
+          attribute.class("rounded-full cursor-pointer " <> outline),
           attribute.style("width", int.to_string(icon_size) <> "px"),
           attribute.style("height", int.to_string(icon_size) <> "px"),
           event.on_click(SetSize(size)),

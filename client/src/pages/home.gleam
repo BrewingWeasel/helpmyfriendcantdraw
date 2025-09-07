@@ -50,7 +50,7 @@ pub fn view(model: Model) -> Element(Msg) {
         html.button(
           [
             attribute.class(
-              "mt-2 text-center text-3xl hover:scale-110 hover:rotate-[0.5deg] tracking-tight duration-200 ease-in-out",
+              "mt-2 text-center text-3xl hover:scale-110 hover:rotate-[0.5deg] tracking-tight duration-200 ease-in-out cursor-pointer",
             ),
           ],
           [html.text("join ->")],
@@ -71,7 +71,7 @@ pub fn view(model: Model) -> Element(Msg) {
         event.on_input(ChangeName),
         attribute.maxlength(16),
         attribute.class("text-center text-gray-500 block mb-12 sm:mb-0"),
-        attribute.placeholder("Enter your name"),
+        attribute.placeholder("enter your name"),
       ]),
       html.div(
         [
@@ -85,7 +85,7 @@ pub fn view(model: Model) -> Element(Msg) {
               [
                 event.on_click(JoinRoom),
                 attribute.class(
-                  "hover:scale-110 hover:rotate-[1deg] hover:tracking-wide tracking-tight duration-200 ease-in-out",
+                  "hover:scale-110 hover:rotate-[1deg] hover:tracking-wide tracking-tight duration-200 ease-in-out cursor-pointer",
                 ),
               ],
               [html.text("create room")],
@@ -97,7 +97,7 @@ pub fn view(model: Model) -> Element(Msg) {
               [
                 event.on_click(UseCode),
                 attribute.class(
-                  "hover:scale-110 hover:-rotate-[1.5deg] hover:tracking-wide tracking-tight duration-200 ease-in-out",
+                  "hover:scale-110 hover:-rotate-[1.5deg] hover:tracking-wide tracking-tight duration-200 ease-in-out cursor-pointer",
                 ),
               ],
               [html.text("join with code")],

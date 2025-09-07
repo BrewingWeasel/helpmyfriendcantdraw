@@ -1,4 +1,5 @@
 import components/chat
+import components/clickable
 import components/editable_list
 import components/icons
 import gleam/dict
@@ -345,8 +346,8 @@ pub fn view(model: Model) -> Element(Msg) {
                 "layout:",
                 fn(layout) {
                   case layout {
-                    party.Horizontal -> element.text("Horizontal")
-                    party.Vertical -> element.text("Vertical")
+                    party.Horizontal -> element.text("horizontal")
+                    party.Vertical -> element.text("vertical")
                   }
                 },
                 info.drawings_layout,
@@ -357,11 +358,11 @@ pub fn view(model: Model) -> Element(Msg) {
                 "overlap:",
                 fn(overlap) {
                   case overlap {
-                    30 -> element.text("Small")
-                    50 -> element.text("Medium")
-                    80 -> element.text("Large")
-                    0 -> element.text("None")
-                    _ -> element.text("Custom")
+                    30 -> element.text("small")
+                    50 -> element.text("medium")
+                    80 -> element.text("large")
+                    0 -> element.text("none")
+                    _ -> element.text("custom")
                   }
                 },
                 info.overlap,
@@ -421,12 +422,10 @@ pub fn view(model: Model) -> Element(Msg) {
               ),
               palette_settings,
             ]),
-            html.button(
+            clickable.button(
               [
-                attribute.class(
-                  "bg-rose-200 p-2 h-12 rounded-xl disabled:cursor-not-allowed disabled:bg-gray-200",
-                ),
                 attribute.disabled(!is_owner || list.length(players) < 2),
+                attribute.class("mt-4"),
                 event.on_click(Start),
               ],
               [element.text("start")],
@@ -472,8 +471,9 @@ pub fn view(model: Model) -> Element(Msg) {
         html.h3([], [element.text("PARTY CODE")]),
         html.h3(
           [
+            clickable.animation(),
             attribute.class(
-              "text-5xl cursor-pointer hover:scale-110 duration-200 ease-in-out",
+              "text-5xl",
             ),
             event.on_click(CopyCode),
           ],
@@ -538,9 +538,8 @@ fn one_of_options(options, description, viewer, current, msg) {
     html.td([], [
       html.button(
         [
-          attribute.class(
-            "mx-1 text-5xl hover:scale-120 cursor-pointer duration-150 ease-in-out",
-          ),
+          clickable.animation(),
+          attribute.class("mx-1 text-5xl hover:scale-120"),
           event.on_click(msg(previous)),
         ],
         [element.text("<")],
@@ -550,9 +549,8 @@ fn one_of_options(options, description, viewer, current, msg) {
     html.td([], [
       html.button(
         [
-          attribute.class(
-            "mx-1 text-5xl hover:scale-120 cursor-pointer duration-150 ease-in-out",
-          ),
+          clickable.animation(),
+          attribute.class("mx-1 text-5xl hover:scale-120"),
           event.on_click(msg(next)),
         ],
         [element.text(">")],

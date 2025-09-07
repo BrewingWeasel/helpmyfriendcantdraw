@@ -1,3 +1,4 @@
+import components/clickable
 import shared/palette
 import components/chat
 import gleam/list
@@ -96,18 +97,20 @@ pub fn view(model: Model) {
         ]),
         chat.view(model.party.chat, model.party.id)
           |> element.map(ChatMessage),
-        html.button(
+        clickable.button(
           [
-            attribute.class("bg-rose-200 rounded-lg p-1 mt-2 max-h-12 text-2xl"),
+            attribute.class("mt-2 max-h-12 text-2xl"),
             event.on_click(ReturnToParty),
           ],
-          [html.text("Party Menu")],
+          [html.text("party menu")],
         ),
-        html.button(
-          [attribute.class("bg-rose-200 rounded-lg p-1 mt-2 max-h-12 text-2xl")],
+        clickable.button(
+          [
+            attribute.class("mt-2 max-h-12 text-2xl"),
+          ],
           [
             html.a([attribute.download("drawing.png"), attribute.id(save_id)], [
-              element.text("Save drawing"),
+              element.text("save drawing"),
             ]),
           ],
         ),

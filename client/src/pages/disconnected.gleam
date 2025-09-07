@@ -19,11 +19,11 @@ pub fn view(reason: String) {
       html.a(
         [
           attribute.class(
-            "mt-4 text-3xl text-center hover:scale-110 hover:rotate-[-0.5deg] tracking-tight duration-200 ease-in-out",
+            "mt-4 text-3xl text-center hover:scale-110 hover:rotate-[-0.5deg] tracking-tight duration-200 ease-in-out cursor-pointer",
           ),
           attribute.href("/"),
         ],
-        [html.text("Return home")],
+        [html.text("return home")],
       ),
     ],
   )
